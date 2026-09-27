@@ -6,18 +6,24 @@ import 'package:flutter_test/flutter_test.dart';
 /// 应用图标生成器（Flutter 渲染，程序化生成，无外部图片工具依赖）。
 ///
 /// 运行：flutter test tool/generate_icons.dart
-/// 设计：深青渐变圆角底 + 白色"⇄ 双换向箭头"（寓意格式转换/互转）。
+/// 设计：浅灰底 + "带烟囱的厂房 + 厂房内的换向箭头"。
+/// 厂房＝所有处理都在本地这台"厂"里完成（不联网、不上传）；
+/// 厂房内的 ⇄＝格式转换 / 音乐脱壳 / 双流合并这几件事都在厂内完成。
+/// 屋顶板与烟囱画成实心色块（不靠线宽留白），墙体用 6.5 单位描边，箭头实心。
+/// 图形按 108dp 画布坐标设计：自适应前景层按原始比例（外缘落在安全区内），
+/// legacy 圆角图不被系统遮罩裁切，再放大 [_legacyScale] 倍铺得更满。
 /// 输出会直接覆盖 android/app/src/main/res 下的 mipmap 图标资源。
 /// 已从 test/ 移出，普通 `flutter test` 不会执行它。
 void main() async {
   await generateIcons();
 }
 
-// 品牌渐变与箭头颜色
-const int _cTop = 0xFF00695C; // 深青（teal 800）
-const int _cBottom = 0xFF26A69A; // 青（teal 400）
-const int _cArrow = 0xFFFFFFFF; // 白色箭头
-const int _cBg = 0xFF00695C; // 自适应背景纯色
+// 中性灰阶：不绑定固定彩色，方便以后适配 Android 13+ 主题图标（莫奈取色）
+const int _cInk = 0xFF1E2A38; // 厂房轮廓与内部箭头
+const int _cBg = 0xFFF1F3F7; // 自适应背景层 / legacy 圆角底
+
+/// legacy 圆角图可以铺满画布，比自适应前景层再放大一点
+const double _legacyScale = 1.25;
 
 const List<(String, int)> _dpiLegacy = [
   ('mipmap-mdpi', 48),
@@ -74,75 +80,102 @@ Future<void> generateIcons() async {
 Future<ui.Image> _render(int size, {required bool legacyStyle}) async {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
+  final s = size.toDouble();
 
   if (legacyStyle) {
-    // 圆角底 + 渐变
+    // 圆角浅灰底（legacy 图标不会被系统遮罩裁切）
     canvas.clipRRect(ui.RRect.fromRectAndRadius(
-      ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+      ui.Rect.fromLTWH(0, 0, s, s),
       ui.Radius.circular(size * 0.20),
     ));
-    final paint = ui.Paint()
-      ..shader = ui.Gradient.linear(
-        ui.Offset(0, 0),
-        ui.Offset(0, size.toDouble()),
-        const [ui.Color(_cTop), ui.Color(_cBottom)],
-      );
     canvas.drawRect(
-      ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
-      paint,
+      ui.Rect.fromLTWH(0, 0, s, s),
+      ui.Paint()..color = const ui.Color(_cBg),
     );
-    _drawArrows(canvas, size.toDouble(), size * 0.60);
+    _drawFactory(canvas, s, _legacyScale);
   } else {
-    // 自适应前景：透明背景 + 居中白色箭头（预留遮罩安全区）
-    _drawArrows(canvas, size.toDouble(), size * 0.46);
+    // 自适应前景层：透明底，图形按 108dp 原始比例
+    _drawFactory(canvas, s, 1.0);
   }
 
   return recorder.endRecording().toImage(size, size);
 }
 
-void _drawArrows(ui.Canvas canvas, double s, double l) {
-  final cx = s * 0.5;
-  final strokeW = l * 0.085;
-  final halfH = l * 0.13;
-  final yTop = s * 0.5 - l * 0.16;
-  final yBottom = s * 0.5 + l * 0.16;
+/// 在 [s]×[s] 的画布上按 108dp 坐标绘制厂房，[k] 为额外缩放系数。
+///
+/// 外缘范围 x 26.75~81.25、y 25~80.75（含 6.5 单位线宽），最远点在底部两角
+/// （距画面中心约 34），落在启动器圆形遮罩的安全区内。
+void _drawFactory(ui.Canvas canvas, double s, double k) {
+  canvas.save();
+  canvas.translate(s / 2, s / 2);
+  canvas.scale(s / 108 * k);
+  canvas.translate(-54, -54);
 
-  final stroke = ui.Paint()
-    ..color = const ui.Color(_cArrow)
+  const strokeW = 6.5;
+
+  // 两根烟囱，实心：工厂最直白的剪影特征。必须实心——描边线宽会把管腔堵死，
+  // 看起来像提手。烟囱直接落在屋顶（墙体上边线）上，一高一矮，避免被读成提手。
+  final chimney = ui.Paint()..color = const ui.Color(_cInk);
+  canvas.drawRect(const ui.Rect.fromLTRB(40, 25, 47.5, 48), chimney); // 左烟囱（高）
+  canvas.drawRect(const ui.Rect.fromLTRB(60.5, 31, 68, 48), chimney); // 右烟囱（矮）
+
+  // 厂房墙体：平顶矩形厂房（线宽 6.5，画在路径中心线上）
+  final outline = ui.Path()
+    ..moveTo(30, 45)
+    ..lineTo(78, 45)
+    ..lineTo(78, 70.5)
+    ..arcToPoint(const ui.Offset(71, 77.5),
+        radius: const ui.Radius.circular(7), clockwise: true)
+    ..lineTo(37, 77.5)
+    ..arcToPoint(const ui.Offset(30, 70.5),
+        radius: const ui.Radius.circular(7), clockwise: true)
+    ..close();
+
+  canvas.drawPath(
+    outline,
+    ui.Paint()
+      ..color = const ui.Color(_cInk)
+      ..style = ui.PaintingStyle.stroke
+      ..strokeWidth = strokeW
+      ..strokeJoin = ui.StrokeJoin.miter
+      ..strokeCap = ui.StrokeCap.butt,
+  );
+
+  // 厂房内的实心 ⇄：上排向右、下排向左
+  const arrowW = 6.5;
+  const headHalf = 4.75;
+  const yTop = 54.75;
+  const yBottom = 67.25;
+
+  final line = ui.Paint()
+    ..color = const ui.Color(_cInk)
     ..style = ui.PaintingStyle.stroke
-    ..strokeWidth = strokeW
-    ..strokeCap = ui.StrokeCap.round
-    ..strokeJoin = ui.StrokeJoin.round;
+    ..strokeWidth = arrowW
+    ..strokeCap = ui.StrokeCap.butt;
+  final solid = ui.Paint()..color = const ui.Color(_cInk);
 
-  final fill = ui.Paint()
-    ..color = const ui.Color(_cArrow)
-    ..style = ui.PaintingStyle.fill;
-
-  // 上箭头 → 左
-  canvas.drawLine(
-    ui.Offset(cx + l * 0.32, yTop),
-    ui.Offset(cx - l * 0.14, yTop),
-    stroke,
+  canvas.drawLine(const ui.Offset(39, yTop), const ui.Offset(58.5, yTop), line);
+  canvas.drawPath(
+    ui.Path()
+      ..moveTo(69, yTop)
+      ..lineTo(58.5, yTop - headHalf)
+      ..lineTo(58.5, yTop + headHalf)
+      ..close(),
+    solid,
   );
-  final headUp = ui.Path()
-    ..moveTo(cx - l * 0.06, yTop - halfH)
-    ..lineTo(cx - l * 0.42, yTop)
-    ..lineTo(cx - l * 0.06, yTop + halfH)
-    ..close();
-  canvas.drawPath(headUp, fill);
 
-  // 下箭头 → 右
   canvas.drawLine(
-    ui.Offset(cx - l * 0.32, yBottom),
-    ui.Offset(cx + l * 0.14, yBottom),
-    stroke,
+      const ui.Offset(69, yBottom), const ui.Offset(49.5, yBottom), line);
+  canvas.drawPath(
+    ui.Path()
+      ..moveTo(39, yBottom)
+      ..lineTo(49.5, yBottom - headHalf)
+      ..lineTo(49.5, yBottom + headHalf)
+      ..close(),
+    solid,
   );
-  final headDown = ui.Path()
-    ..moveTo(cx + l * 0.06, yBottom - halfH)
-    ..lineTo(cx + l * 0.42, yBottom)
-    ..lineTo(cx + l * 0.06, yBottom + halfH)
-    ..close();
-  canvas.drawPath(headDown, fill);
+
+  canvas.restore();
 }
 
 Future<void> _writePng(File file, ui.Image image) async {
