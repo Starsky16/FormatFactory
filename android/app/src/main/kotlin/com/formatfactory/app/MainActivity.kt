@@ -105,8 +105,10 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                     result.error("bad_args", "缺少参数", null)
                     return
                 }
+                // 注意：Dart 侧是 invokeMethod<String>，这里必须直接返回 String，
+                // 返回 Map 会被平台通道按 String 强转失败（表现为"成功也报失败"）。
                 runAsync(result, errorCode = "copy_failed") {
-                    mapOf("uri" to copyIntoDownloads(relativeDir, fileName, srcPath))
+                    copyIntoDownloads(relativeDir, fileName, srcPath)
                 }
             }
             // ===== 音乐脱壳（.ncm / .qmc / .kgm 等）=====
@@ -189,15 +191,18 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
             ?: throw IllegalStateException("无法在系统下载目录创建文件")
         try {
             writeFileInto(uri, srcPath)
+            // 写完再取消 pending，避免文件管理器读到半截文件；
+            // 取消 pending 失败就把条目删掉，否则会留下一个永远看不见的 pending 文件
+            val done = ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            if (contentResolver.update(uri, done, null, null) <= 0) {
+                throw IllegalStateException("无法提交文件到系统下载目录")
+            }
         } catch (e: Exception) {
-            contentResolver.delete(uri, null, null) // 失败不留空壳文件
+            contentResolver.delete(uri, null, null) // 失败不留空壳/半截文件
             throw e
         }
-        // 写完再取消 pending，避免文件管理器读到半截文件
-        val done = ContentValues().apply {
-            put(MediaStore.MediaColumns.IS_PENDING, 0)
-        }
-        contentResolver.update(uri, done, null, null)
         return uri.toString()
     }
 
@@ -246,11 +251,15 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
             ?: "application/octet-stream"
     }
 
-    /** 后台线程执行解密，完成后切回主线程返回结果。 */
-    private fun runAsync(
+    /**
+     * 后台线程执行耗时 IO，完成后切回主线程返回结果。
+     * 返回值类型必须与 Dart 侧的接收方式一致（脱壳用 invokeMapMethod、
+     * 导入下载目录用 invokeMethod<String>），否则平台通道强转会抛异常、被 Dart 吞成失败。
+     */
+    private fun <T> runAsync(
         result: MethodChannel.Result,
         errorCode: String = "unlock_failed",
-        job: () -> Map<String, String>,
+        job: () -> T,
     ) {
         Thread {
             try {

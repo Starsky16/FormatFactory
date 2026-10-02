@@ -154,9 +154,11 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       // 把输出路径更新为解密后的真实文件，再与转换流程一致地收尾（含通知/历史/SAF复制）
       final done = task.copyWith(outputPath: r.path, progress: 1.0);
       _patch(done.id, (_) => done);
-      // 若在脱壳过程中用户请求取消（原生不支持中途停），按"已取消"收尾
+      // 若在脱壳过程中用户请求取消（原生不支持中途停），按"已取消"收尾。
+      // 注意要传 done（outputPath 已换成真实产物），否则 _finish 里的
+      // "删除半成品"会拿到输出目录、删不掉文件。
       if (_cancelRequested.remove(task.id)) {
-        _finish(task, canceled: true);
+        _finish(done, canceled: true);
         return;
       }
       if (_notifyEnabled) {
