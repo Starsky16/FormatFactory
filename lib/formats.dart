@@ -251,6 +251,15 @@ const OptionField fieldContainer = OptionField(
       'VP9 建议配 WebM。',
 );
 
+/// 仅"仅换容器"预设使用：目标容器 + 不重编码的兼容性提醒。
+const OptionField fieldRemuxContainer = OptionField(
+  SettingKey.container,
+  '目标容器',
+  kVideoContainerOptions,
+  help: '只换封装、不重新编码，因此必须与源流兼容：'
+      'MP4/MKV 最保险；WebM 只收 VP8/VP9/AV1；AVI/FLV/3GP 只收 H.264 系列。',
+);
+
 const OptionField fieldContainerImage = OptionField(
   SettingKey.container,
   '图片格式',
@@ -368,7 +377,15 @@ List<String> customVideoArgs(ConvertSettings s) {
   }
   final audioCommon = audioCommonArgs(s);
   if (audioCommon != null) args.addAll(audioCommon);
+  // MP4/MOV 家族补 +faststart：与内置 MP4 预设保持一致（边下边播）
+  if (isMovContainer(s)) args.addAll(['-movflags', '+faststart']);
   return args;
+}
+
+/// 容器是否属于 MP4/MOV 家族（`-movflags +faststart` 只对它们有意义）。
+bool isMovContainer(ConvertSettings s) {
+  final c = s.of(SettingKey.container);
+  return c == 'MP4' || c == 'MOV';
 }
 
 /// 自定义视频：封装格式 -> 输出扩展名。
@@ -394,7 +411,8 @@ String videoContainerExt(ConvertSettings s) => switch (s.of(SettingKey.container
     _ => ('m4a', <String>['-c:a', 'aac']),
   };
   final common = audioCommonArgs(s);
-  final args = <String>[...codec, ...?common];
+  // -vn：音频输出统一丢弃视频流（输入是视频时只取音轨）
+  final args = <String>['-vn', ...codec, ...?common];
   return (ext: ext, args: args);
 }
 

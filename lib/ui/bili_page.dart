@@ -139,17 +139,19 @@ class _BiliPageState extends ConsumerState<BiliPage> {
     });
 
     final tasks = <ConvertTask>[];
+    String? warning;
     for (final item in picked) {
       // 纯音频缓存输出 m4a；重新编码只对“有画面”的条目有意义
       final doEncode = reencode && item.hasVideo;
       final ext = item.hasVideo ? 'mp4' : 'm4a';
       final name = BiliCache.safeFileName(item.title);
-      final outPath = await FileStore.uniqueOutputPath(
+      final plan = await FileStore.plan(
         MediaKind.video,
         '$name.$ext',
         ext,
         target: target,
       );
+      warning ??= plan.warning;
       tasks.add(ConvertTask(
         id: TaskQueue.newId(),
         kind: MediaKind.video,
@@ -158,10 +160,11 @@ class _BiliPageState extends ConsumerState<BiliPage> {
         presetId: doEncode ? preset.id : BiliCache.kCopyPresetId,
         presetName: doEncode ? 'MP4（重新编码）' : 'MP4（缓存合并）',
         settings: doEncode ? settings : ConvertSettings.empty,
-        outputPath: outPath,
+        outputPath: plan.path,
         createdAt: now,
         mergeAudioPath: item.audioPath,
-        copyTreeUri: target == AppSettings.targetApp ? null : target,
+        safTreeUri: plan.safTreeUri,
+        mediaStoreDir: plan.mediaStoreDir,
         inputDurationSeconds: item.durationSeconds,
       ));
     }
@@ -169,9 +172,10 @@ class _BiliPageState extends ConsumerState<BiliPage> {
     ref.read(taskQueueProvider.notifier).enqueue(tasks);
     if (!mounted) return;
     setState(() => _submitting = false);
-    messenger.showSnackBar(
-      SnackBar(content: Text('已把 ${tasks.length} 个缓存视频加入队列')),
-    );
+    final msg = warning == null
+        ? '已把 ${tasks.length} 个缓存视频加入队列'
+        : '$warning；已把 ${tasks.length} 个缓存视频加入队列';
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
     Navigator.of(context).pop(tasks.length);
   }
 

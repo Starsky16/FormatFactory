@@ -6,8 +6,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models.dart';
 import '../services/file_store.dart';
+import '../services/manage_permission.dart';
 import '../services/storage_access.dart';
 import '../state/app_settings.dart';
+import 'file_browser_page.dart';
 
 /// 设置页：输出位置（视频/音频/图片各自设置）+ 读取文件方式。
 class SettingsPage extends ConsumerStatefulWidget {
@@ -87,13 +89,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Text(
-              '输出到"应用专属目录"无需任何权限；'
-              '选择"自定义目录"后，转换完成会自动把文件保存到该目录。',
+              '默认保存在手机"下载"目录的 FormatExport 下：文件管理器里直接可见、'
+              '卸载应用也不会丢。也可以改成"应用专属目录"（无需权限、卸载即删）'
+              '或你自选的目录；自选目录不可写时会自动退回应用专属目录并在转换时提示。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline),
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        _sectionTitle('自定义目录的选择方式'),
+        _dirPickerCard(theme),
+        const SizedBox(height: 12),
         _sectionTitle('通知'),
         Card(
           child: SwitchListTile(
@@ -252,12 +259,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget _outputTile(MediaKind kind) {
     final settings = ref.watch(appSettingsProvider);
     final target = settings.targetOf(kind);
+    final isDefault = target == AppSettings.targetDefault;
     final isApp = target == AppSettings.targetApp;
+    final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+          backgroundColor: theme.colorScheme.secondaryContainer,
           child: Icon(
             switch (kind) {
               MediaKind.video => Icons.videocam_outlined,
@@ -271,13 +280,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isApp ? '应用专属目录' : '自定义目录'),
-            if (isApp)
+            Text(isDefault
+                ? '默认目录（Download/FormatExport）'
+                : isApp
+                    ? '应用专属目录'
+                    : '自定义目录'),
+            if (isDefault)
+              FutureBuilder<String>(
+                future: FileStore.publicDirText(kind),
+                builder: (_, snap) => Text(
+                  snap.data ??
+                      'Download/${FileStore.publicDirName}/${kind.dirName}',
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            else if (isApp)
               FutureBuilder<String>(
                 future: FileStore.appOutputDirText(),
                 builder: (_, snap) => Text(
                   '${snap.data ?? ''}/${kind.dirName}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -285,7 +309,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             else
               Text(
                 target,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: theme.textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -299,11 +323,50 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  /// 底部弹层选择输出位置：应用目录 / 自定义目录。
+  /// "自定义输出目录"用哪种方式挑选：系统 SAF / 内置文件浏览器。
+  Widget _dirPickerCard(ThemeData theme) {
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.folder_special_outlined),
+              title: const Text('系统目录选择器'),
+              subtitle: const Text('用系统界面挑选目录，无需任何权限（推荐）'),
+              trailing: settings.dirPickerMode == 'saf'
+                  ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                  : const Icon(Icons.radio_button_unchecked),
+              onTap: () => notifier.setDirPickerMode('saf'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('内置文件浏览器'),
+              subtitle: const Text(
+                  '可进入 Android/data 等系统选择器打不开的目录（需"文件管理权限"）'),
+              trailing: settings.dirPickerMode == 'manage'
+                  ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                  : const Icon(Icons.radio_button_unchecked),
+              onTap: () => notifier.setDirPickerMode('manage'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 底部弹层选择输出位置：默认目录 / 应用专属目录 / 自定义目录。
   Future<void> _chooseOutput(MediaKind kind) async {
     final notifier = ref.read(appSettingsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
-    final current = ref.read(appSettingsProvider).targetOf(kind);
+    final settings = ref.read(appSettingsProvider);
+    final current = settings.targetOf(kind);
+    final useBuiltinPicker = settings.dirPickerMode == 'manage';
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -313,6 +376,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               title: Text('${kind.label}输出位置'),
               subtitle: const Text('选择转换完成的文件保存到哪里'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('默认目录（推荐）'),
+              subtitle: const Text('手机"下载"目录的 FormatExport 下，文件管理器可见'),
+              trailing: current == AppSettings.targetDefault
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.of(ctx).pop('default'),
             ),
             ListTile(
               leading: const Icon(Icons.smartphone),
@@ -326,26 +398,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               leading: const Icon(Icons.create_new_folder_outlined),
               title: const Text('选择自定义目录…'),
-              subtitle: const Text('用系统目录选择器挑选保存位置'),
+              subtitle: Text(useBuiltinPicker
+                  ? '用内置文件浏览器挑选（需"文件管理权限"）'
+                  : '用系统目录选择器挑选保存位置'),
               onTap: () => Navigator.of(ctx).pop('pick'),
             ),
-            if (current != AppSettings.targetApp)
-              ListTile(
-                leading: const Icon(Icons.delete_sweep_outlined),
-                title: const Text('改回应用专属目录'),
-                onTap: () => Navigator.of(ctx).pop('app'),
-              ),
           ],
         ),
       ),
     );
 
     if (action == null) return;
+    if (action == 'default') {
+      await notifier.setOutput(kind, AppSettings.targetDefault);
+      return;
+    }
     if (action == 'app') {
       await notifier.setOutput(kind, AppSettings.targetApp);
       return;
     }
-    // 打开系统目录选择器（原生 SAF）
+    await _pickCustomDir(kind, notifier, messenger, useBuiltinPicker);
+  }
+
+  /// 按"自定义目录的选择方式"打开内置文件浏览器或系统 SAF 选择器。
+  Future<void> _pickCustomDir(
+    MediaKind kind,
+    AppSettingsNotifier notifier,
+    ScaffoldMessengerState messenger,
+    bool useBuiltinPicker,
+  ) async {
+    if (useBuiltinPicker) {
+      if (!await ManagePermission.ensureGranted()) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('需要"所有文件访问"权限才能浏览整台设备；'
+              '也可以把选择方式改成"系统目录选择器"'),
+        ));
+        return;
+      }
+      if (!mounted) return;
+      final picked = await Navigator.of(context).push<List<String>>(
+        MaterialPageRoute(
+          builder: (_) => FileBrowserPage(
+            extensions: const [],
+            pickDirectory: true,
+            initialPath: '/storage/emulated/0',
+            title: '选择${kind.label}输出目录',
+          ),
+        ),
+      );
+      if (picked == null || picked.isEmpty) return;
+      final root = picked.first;
+      await notifier.setOutput(kind, root);
+      messenger.showSnackBar(SnackBar(
+        content: Text('已设置输出目录：$root${Platform.pathSeparator}${kind.dirName}'),
+      ));
+      return;
+    }
+    // 系统目录选择器（原生 SAF）
     final uri = await StorageAccess.pickDirectory();
     if (uri == null) return; // 用户取消
     await notifier.setOutput(kind, uri);

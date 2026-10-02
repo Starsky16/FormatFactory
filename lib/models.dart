@@ -87,7 +87,8 @@ class ConvertTask {
     required this.createdAt,
     this.unlockFormat,
     this.mergeAudioPath,
-    this.copyTreeUri,
+    this.safTreeUri,
+    this.mediaStoreDir,
     this.inputDurationSeconds,
     this.status = TaskStatus.queued,
     this.progress = 0,
@@ -114,9 +115,17 @@ class ConvertTask {
   /// 源时长（秒），FFprobe 读出来用于换算进度百分比。
   final double? inputDurationSeconds;
 
-  /// 若设置了"用户自选 SAF 目录"，转换完成后要把文件复制进该目录。
-  /// 值为 SAF 目录 uri；null 表示直接输出到应用专属目录。
-  final String? copyTreeUri;
+  /// 非空 = 转换完成后要把产物复制进这个"用户自选目录"（SAF content:// uri）。
+  final String? safTreeUri;
+
+  /// 非空 = 转换完成后要把产物导入系统"下载"目录下的该相对路径
+  /// （形如 `Download/FormatExport/video`）。
+  /// 默认输出目录在没有"所有文件访问"权限时走这条路：先写内部工作区，
+  /// 成功后由原生端交给 MediaStore 落进公共 Download。
+  final String? mediaStoreDir;
+
+  /// 产物是否需要"搬运"到用户可见位置（SAF 目录 / 系统下载目录）。
+  bool get needsExport => safTreeUri != null || mediaStoreDir != null;
 
   final TaskStatus status;
 
@@ -145,7 +154,8 @@ class ConvertTask {
       createdAt: createdAt,
       unlockFormat: unlockFormat,
       mergeAudioPath: mergeAudioPath ?? this.mergeAudioPath,
-      copyTreeUri: copyTreeUri,
+      safTreeUri: safTreeUri,
+      mediaStoreDir: mediaStoreDir,
       inputDurationSeconds: inputDurationSeconds,
       status: status ?? this.status,
       progress: progress ?? this.progress,

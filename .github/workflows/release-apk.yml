@@ -19,6 +19,10 @@ jobs:
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 发布步骤要读 annotated tag 的注释作为 Release 的「本次更新」。
+          # tag 事件下 checkout 本就会取到该 tag，这里显式声明只是不依赖它的默认行为。
+          fetch-tags: true
 
       - uses: subosito/flutter-action@v2
         with:
@@ -63,15 +67,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Release 正文 = 固定安装说明 + annotated tag 注释（即「本次更新」）。
+          # 发版时把更新内容写进 tag 注释即可自动带进 Release，不必事后再 gh release edit 补写。
+          # （不用 --generate-notes：本仓库直接推分支、没有 PR，自动生成的正文只有一行 Full Changelog。）
+          {
+            echo "自动构建于 GitHub Actions，可用下方 APK 安装：arm64-v8a（主流手机）/ armeabi-v7a（32位老机）/ x86_64（模拟器）。"
+            if [ "$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
+              notes="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+              if [ -n "$notes" ]; then
+                printf '\n## 本次更新\n\n%s\n' "$notes"
+              fi
+            fi
+          } > "$RUNNER_TEMP/release-notes.md"
+          echo "----- Release 正文 -----"
+          cat "$RUNNER_TEMP/release-notes.md"
+          echo "-------------------------"
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME · 格式工厂 Android" \
-            --notes "自动构建于 GitHub Actions，可用下方 APK 安装：arm64-v8a（主流手机）/ armeabi-v7a（32位老机）/ x86_64（模拟器）。" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
             build/app/outputs/flutter-apk/app-x86_64-release.apk || \
             gh release edit "$GITHUB_REF_NAME" \
               --title "$GITHUB_REF_NAME · 格式工厂 Android" \
-              --notes "自动构建于 GitHub Actions，可用下方 APK 安装：arm64-v8a（主流手机）/ armeabi-v7a（32位老机）/ x86_64（模拟器）。"
+              --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Upload artifacts (manual run / non-tag)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}

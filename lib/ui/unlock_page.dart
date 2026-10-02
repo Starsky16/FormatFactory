@@ -116,7 +116,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final messenger = ScaffoldMessenger.of(context);
     final now = DateTime.now();
     final target = ref.read(appSettingsProvider).targetOf(MediaKind.audio);
-    final destDir = await FileStore.outputDir(MediaKind.audio, target);
+    final out = await FileStore.resolve(MediaKind.audio, target);
+    final destDir = out.dir;
 
     final tasks = <ConvertTask>[];
     for (final e in _items) {
@@ -133,14 +134,16 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         outputPath: destDir.path,
         createdAt: now,
         unlockFormat: ext,
-        copyTreeUri: target == AppSettings.targetApp ? null : target,
+        safTreeUri: out.safTreeUri,
+        mediaStoreDir: out.mediaStoreDir,
       ));
     }
     ref.read(taskQueueProvider.notifier).enqueue(tasks);
     if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(content: Text('已将 ${tasks.length} 个脱壳任务加入队列')),
-    );
+    final msg = out.warning == null
+        ? '已将 ${tasks.length} 个脱壳任务加入队列'
+        : '${out.warning}；已将 ${tasks.length} 个脱壳任务加入队列';
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
     Navigator.of(context).pop(tasks.length);
   }
 

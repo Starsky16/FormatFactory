@@ -155,15 +155,15 @@ class _HistoryTile extends ConsumerWidget {
             .showSnackBar(const SnackBar(content: Text('源文件已不存在，无法重试')));
         return;
       }
-      // 脱壳任务（presetId 形如 unlock_ncm）重试：输出目录 = 原输出文件所在目录
+      // 脱壳任务（presetId 形如 unlock_ncm）重试：
+      // 输出目录按"当前设置"重新解析——默认输出走 MediaStore 导入，
+      // 产物是先落在内部工作区再搬运出去的，沿用历史里的旧目录会看不到文件。
       final isUnlock = entry.presetId.startsWith('unlock_');
       if (isUnlock) {
-        final dest = File(entry.outputPath).parent;
-        if (!dest.existsSync()) {
-          messenger.showSnackBar(
-              const SnackBar(content: Text('原输出目录已不存在，无法重试')));
-          return;
-        }
+        final out = await FileStore.resolve(
+          entry.kind,
+          ref.read(appSettingsProvider).targetOf(entry.kind),
+        );
         final task = ConvertTask(
           id: TaskQueue.newId(),
           kind: entry.kind,
@@ -172,12 +172,17 @@ class _HistoryTile extends ConsumerWidget {
           presetId: entry.presetId,
           presetName: entry.presetName,
           settings: entry.settings,
-          outputPath: dest.path,
+          outputPath: out.dir.path,
           createdAt: DateTime.now(),
           unlockFormat: entry.presetId.substring('unlock_'.length),
+          safTreeUri: out.safTreeUri,
+          mediaStoreDir: out.mediaStoreDir,
         );
         ref.read(taskQueueProvider.notifier).enqueue([task]);
-        messenger.showSnackBar(const SnackBar(content: Text('已加入任务队列')));
+        final unlockMsg = out.warning == null
+            ? '已加入任务队列'
+            : '${out.warning}；已加入任务队列';
+        messenger.showSnackBar(SnackBar(content: Text(unlockMsg)));
         return;
       }
       final dot = entry.outputPath.lastIndexOf('.');
@@ -185,7 +190,7 @@ class _HistoryTile extends ConsumerWidget {
           dot >= 0 ? entry.outputPath.substring(dot + 1) : 'mp4';
       final target =
           ref.read(appSettingsProvider).targetOf(entry.kind);
-      final outPath = await FileStore.uniqueOutputPath(
+      final plan = await FileStore.plan(
         entry.kind,
         entry.inputName,
         ext,
@@ -199,12 +204,16 @@ class _HistoryTile extends ConsumerWidget {
         presetId: entry.presetId,
         presetName: entry.presetName,
         settings: entry.settings,
-        outputPath: outPath,
+        outputPath: plan.path,
         createdAt: DateTime.now(),
-        copyTreeUri: target == AppSettings.targetApp ? null : target,
+        safTreeUri: plan.safTreeUri,
+        mediaStoreDir: plan.mediaStoreDir,
       );
       ref.read(taskQueueProvider.notifier).enqueue([task]);
-      messenger.showSnackBar(const SnackBar(content: Text('已加入任务队列')));
+      final msg = plan.warning == null
+          ? '已加入任务队列'
+          : '${plan.warning}；已加入任务队列';
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 }

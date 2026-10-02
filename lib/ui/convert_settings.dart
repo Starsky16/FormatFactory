@@ -54,21 +54,33 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
     });
   }
 
+  /// 当前输出位置的说明（跟随设置页里的选择）。
+  String get _outputHint {
+    final target = ref.watch(appSettingsProvider).targetOf(widget.kind);
+    if (target == AppSettings.targetDefault) {
+      return '保存在手机"下载"目录的 FormatExport/${widget.kind.dirName} 下，'
+          '文件管理器里可以直接看到；转换完成后也能在"任务"页分享 / 另存到任何位置。';
+    }
+    if (target == AppSettings.targetApp) {
+      return '保存在应用专属目录（卸载应用时会一起删除）；'
+          '转换完成后可在"任务"页把文件分享 / 保存到任何位置。';
+    }
+    return '保存在你设置的目录；转换完成后可在"任务"页分享 / 另存。';
+  }
+
   Future<void> _submit() async {
     setState(() => _submitting = true);
     final tasks = <ConvertTask>[];
     final now = DateTime.now();
     final settings = ConvertSettings(Map.of(_values));
     final outExt = _preset.outExt(settings);
-    // 输出目标："app" 或用户自选 SAF 目录 uri
+    // 输出目标：默认目录 Download/FormatExport / 应用专属目录 / 用户自选目录
     final target = ref.read(appSettingsProvider).targetOf(widget.kind);
+    String? warning;
     for (final f in widget.files) {
-      final outPath = await FileStore.uniqueOutputPath(
-        widget.kind,
-        f.name,
-        outExt,
-        target: target,
-      );
+      final plan =
+          await FileStore.plan(widget.kind, f.name, outExt, target: target);
+      warning ??= plan.warning;
       tasks.add(ConvertTask(
         id: TaskQueue.newId(),
         kind: widget.kind,
@@ -77,13 +89,18 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
         presetId: _preset.id,
         presetName: _preset.name,
         settings: settings,
-        outputPath: outPath,
+        outputPath: plan.path,
         createdAt: now,
-        copyTreeUri: target == AppSettings.targetApp ? null : target,
+        safTreeUri: plan.safTreeUri,
+        mediaStoreDir: plan.mediaStoreDir,
         inputDurationSeconds: f.info?.durationSeconds,
       ));
     }
     if (!mounted) return;
+    if (warning != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(warning)));
+    }
     ref.read(taskQueueProvider.notifier).enqueue(tasks);
     Navigator.of(context).pop(tasks.length);
   }
@@ -117,9 +134,7 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
             child: ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('输出到哪里？'),
-              subtitle: const Text(
-                '输出文件保存在应用专属目录，转换完成后可在"任务"页把文件分享 / 保存到任何位置。',
-              ),
+              subtitle: Text(_outputHint),
             ),
           ),
         ],

@@ -21,6 +21,15 @@ const List<String> kAudioExtensions = [
   'mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'wma', 'amr',
   'ac3', 'ape', 'aiff', 'mka',
 ];
+
+/// 音频转换允许的输入 = 音频本身 + 视频。
+/// 选到视频时由 FFmpeg 只提取里面的音轨（音频预设统一带 `-vn`），
+/// 因此"视频转 MP3"这类需求不需要另建入口。
+const List<String> kAudioInputExtensions = [
+  ...kAudioExtensions,
+  ...kVideoExtensions,
+];
+
 const List<String> kImageExtensions = [
   'jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'tif', 'tiff', 'ico',
   'heic', 'heif', 'jfif',
@@ -44,8 +53,16 @@ class _ConvertFlowState extends ConsumerState<ConvertFlow> {
 
   List<String> get _exts => switch (widget.kind) {
         MediaKind.video => kVideoExtensions,
-        MediaKind.audio => kAudioExtensions,
+        MediaKind.audio => kAudioInputExtensions,
         MediaKind.image => kImageExtensions,
+      };
+
+  /// 空列表页的提示文案（音频类额外说明"选视频只取音轨"）。
+  String get _extsHint => switch (widget.kind) {
+        MediaKind.audio => '支持音频（${kAudioExtensions.join(' / ')}），'
+            '也支持视频（${kVideoExtensions.join(' / ')}）——'
+            '选视频时只提取其中的音轨；可一次多选',
+        _ => '支持 ${_exts.join(' / ')} 等格式，可一次多选',
       };
 
   Future<void> _pickFiles() async {
@@ -230,7 +247,7 @@ class _ConvertFlowState extends ConsumerState<ConvertFlow> {
             const Text('还没有选择文件', style: TextStyle(fontSize: 16)),
             const SizedBox(height: 8),
             Text(
-              '支持 ${_exts.join(' / ')} 等格式，可一次多选',
+              _extsHint,
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),

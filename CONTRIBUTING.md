@@ -48,7 +48,7 @@ android/app/src/test/.../unlock/          JVM 单元测试（含真实 .ncm 样�
 ## 发布（维护者）
 1. 递增 `pubspec.yaml` 的 `version: X.Y.Z+N`（`+N` 是 versionCode，**每次发版必须递增**）
 2. 提交到 `dev` → 合并到 `main`（`main` 只放已验证代码）
-3. 打 tag 并推送：`git tag -a vX.Y.Z -m "vX.Y.Z: 一句话说明" && git push origin vX.Y.Z`——CI 会自动构建 3 个 split APK 并创建 Release
+3. 打 **annotated** tag 并推送：`git tag -a vX.Y.Z -m "<本次更新说明>" && git push origin vX.Y.Z`——CI 会自动构建 3 个 split APK 并创建 Release，**tag 注释会成为 Release 正文里的「本次更新」**（写多行用 `git tag -a vX.Y.Z -F <说明文件>`；若用 lightweight tag `git tag vX.Y.Z`，正文里就只有安装说明）
 4. 正式签名：CI 由仓库 secrets 提供（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` / `ANDROID_KEY_ALIAS`）；
    本地构建读取 `android/key.properties`（已 gitignore，不进版本库），文件不存在时自动退回 debug 签名
 

@@ -3,6 +3,9 @@ import 'models.dart';
 
 /// ============================================================
 /// 内置【音频】输出格式清单。添加格式同样复制一条改参数即可。
+///
+/// 约定：每个预设的参数开头都带 `-vn`——这样即使输入是视频，
+/// 也只取其中的音轨（见 convert_flow.dart 的 kAudioInputExtensions）。
 /// ============================================================
 
 final List<FormatPreset> audioPresets = [
@@ -14,7 +17,7 @@ final List<FormatPreset> audioPresets = [
     description: '最通用的音乐格式，任何设备都能播',
     fields: const [fieldAudioBitrate, fieldSampleRate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'libmp3lame'];
+      final args = <String>['-vn', '-c:a', 'libmp3lame'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       return args;
@@ -28,7 +31,7 @@ final List<FormatPreset> audioPresets = [
     description: '苹果生态常见格式，同码率音质略好于 MP3',
     fields: const [fieldAudioBitrate, fieldSampleRate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'aac'];
+      final args = <String>['-vn', '-c:a', 'aac'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       return args;
@@ -42,7 +45,7 @@ final List<FormatPreset> audioPresets = [
     description: '无损格式，音质零损失，体积约为 WAV 一半',
     fields: const [fieldSampleRate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'flac'];
+      final args = <String>['-vn', '-c:a', 'flac'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       return args;
@@ -56,7 +59,7 @@ final List<FormatPreset> audioPresets = [
     description: '无压缩 PCM，任何软件都能打开，体积很大',
     fields: const [fieldSampleRate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'pcm_s16le'];
+      final args = <String>['-vn', '-c:a', 'pcm_s16le'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       return args;
@@ -70,7 +73,7 @@ final List<FormatPreset> audioPresets = [
     description: '开源格式（Vorbis），游戏 / 开源软件常用',
     fields: const [fieldAudioBitrate, fieldSampleRate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'libvorbis'];
+      final args = <String>['-vn', '-c:a', 'libvorbis'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       return args;
@@ -84,7 +87,7 @@ final List<FormatPreset> audioPresets = [
     description: '新一代开源格式，低码率音质极佳',
     fields: const [fieldAudioBitrate, fieldChannels],
     buildArgs: (s) {
-      final args = <String>['-c:a', 'libopus'];
+      final args = <String>['-vn', '-c:a', 'libopus'];
       final common = audioCommonArgs(s);
       if (common != null) args.addAll(common);
       args.addAll(['-f', 'ogg']);

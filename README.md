@@ -4,7 +4,11 @@
 [![Latest Release](https://img.shields.io/github/v/release/Starsky16/format_factory_Android?label=Download)](https://github.com/Starsky16/format_factory_Android/releases/latest)
 [![License](https://img.shields.io/github/license/Starsky16/format_factory_Android)](LICENSE)
 
-一款 Android 上的"格式工厂"：把视频、音频、图片转换成你想要的格式；还能把网易云/QQ音乐/酷狗下载的**加密音乐还原成普通格式**、把 B 站客户端缓存的视频**无损合并成普通 MP4**。全部处理都在手机本地完成，不联网、不上传。
+一款 Android 上的"格式工厂"：把视频、音频、图片转换成你想要的格式；还能把网易云/QQ音乐/酷狗下载的**加密音乐还原成普通格式**、把 B 站客户端缓存的视频**无损合并成普通 MP4**。全部处理都在手机本地完成、**不联网也不上传**——**发布版**未申请 `INTERNET` 权限（`android/app/src/main/AndroidManifest.xml` 与本项目全部依赖的清单里均无该声明，可自行核查；`debug`/`profile` 开发构建按 Flutter 模板默认带此权限，与发布版无关）。
+
+## 🤖 AI 辅助声明
+
+本项目全数由 AI 生成，作者的唯一任务是保证其行为及功能测试正常；本 README 仅有本句为人类所写。
 
 ## 📲 下载与安装
 
@@ -25,11 +29,15 @@
 ### 媒体格式转换
 | 类别 | 输出格式 | 可调参数 |
 |---|---|---|
-| 视频 | MP4(H.264/H.265)、MKV、AVI、MOV、WebM、FLV、3GP、GIF | 分辨率、CRF 质量、视频/音频码率、帧率 |
+| 视频 | MP4(H.264/H.265)、MKV、AVI、MOV、WebM、FLV、3GP、GIF、**仅换容器** | 分辨率、CRF 质量、视频/音频码率、帧率 |
 | 音频 | MP3、AAC(M4A)、FLAC、WAV、OGG、Opus | 码率、采样率、声道 |
 | 图片 | JPG、PNG、WebP、BMP、TIFF、GIF | 尺寸、质量 |
 
 每类还有"**自定义**"选项，编码器/封装/码率等全部参数自由组合，每个参数下都有一行中文说明。
+
+- **音频转换也收视频**：把视频放进"音频转换"就是**提取音轨**（如 MP4 → MP3），不用另找工具。
+- **"仅换容器"（remux）**：不重新编码，只把原有音视频流原样装进新容器（如 MKV → MP4），
+  40 分钟的视频几秒完成、画质音质零损失；要求源编码与目标容器兼容，且不保留字幕/封面。
 
 ### 音乐脱壳（加密音乐还原）
 | 来源 | 扩展名 | 还原为 |
@@ -57,20 +65,27 @@
 - **批量**：一次选多个文件，队列逐个处理，实时进度、可取消/重试/查看原因
 - **后台不中断**：切后台、锁屏也继续转，通知栏显示"转换中 45%（1/3）"，可一键关闭通知
 - **转码历史**：本地保存每次任务，可再次转换、分享、删除
-- **输出位置可设**：视频/音频/图片可分别存到"应用专属目录"或你自选的目录
+- **输出默认看得见**：默认存到手机"下载"目录的 `Download/FormatExport/`（系统文件管理器里直接能看到，卸载应用也不会丢）；
+  也可以分别改成"应用专属目录"或你自选的目录，没有存储权限时自动经系统"下载"（MediaStore）落盘
 - **读取文件方式可选**：系统文件选择器（免权限）或"文件管理权限" + 内置文件浏览器（支持搜索、书签、直达主存储、全选）
+- **选目录方式可选**：自定义输出目录既可用系统目录选择器（免权限），也可用内置文件浏览器（能进系统选择器打不开的 `Android/data`）
 
 ## 🚀 快速上手
 
 1. 打开首页点"**视频/音频/图片转换**"→ 选文件（可多选）→ 选目标格式和参数 → 开始转换；进度在底部"任务"页实时显示。
 2. 首页"**音乐脱壳**"→ 选加密音乐 → 加入任务队列，解出的原始音频自动保存。
 3. 首页"**B站缓存转视频**"→ 选到 B 站客户端的缓存目录 → 勾选要导出的视频 → 开始合并，几秒后得到可任意播放/分享的 MP4。
-4. "**设置**"页可调整三类输出位置、读取文件方式、后台通知开关。
+4. "**设置**"页可调整三类输出位置（默认目录 / 应用专属目录 / 自选目录）、自定义目录的选择方式、读取文件方式、转码通知开关、并行任务数（1~4，1 为串行；视频软编建议 1~2）。
 
 ## ❓ 常见问题
 
 **Q：转换/脱壳后的文件在哪里？**
-默认在应用专属目录 `Android/data/com.formatfactory.app/files/FormatFactory/<类别>/`（无需任何权限）。任务完成后点"分享"可存到相册/发给其它应用；或在设置里把输出位置改成你选的目录。
+默认在手机"下载"目录的 `Download/FormatExport/` 下，按 `video` / `audio` / `image` 分子目录，
+用系统文件管理器进"下载"就能看到，卸载应用也不会被删。若没给应用"所有文件访问"权限，
+应用会自动改走系统"下载"（MediaStore）落盘，位置完全一样。
+也可以在"**设置 → 输出位置**"改成"应用专属目录"
+（`Android/data/com.formatfactory.app/files/FormatFactory/`，无需权限但卸载即删）或你自选的目录；
+任务完成后点"分享"还能另存到相册 / 发给其它应用。
 
 **Q：为什么从 Android 7.0 才开始支持？**
 FFmpeg 转码库要求 API ≥ 24，且 5.0/6.0 设备占比不足 1%，跑视频转码体验也很差。
@@ -100,7 +115,4 @@ B 站缓存放在 `Android/data/tv.danmaku.bili/download`（部分版本为 `And
 
 **致谢**
 [FFmpeg](https://ffmpeg.org/) · [ffmpeg_kit_flutter_new](https://pub.dev/packages/ffmpeg_kit_flutter_new) · [Flutter](https://flutter.dev/) · 脱壳算法参考 [ncmdump](https://github.com/taurusxin/ncmdump) / [ncm2mp3-js](https://github.com/LingBrian/ncm2mp3-js) / [kugou-audio-unlock](https://github.com/onavcn/kugou-audio-unlock)（MIT）
-
-## 注意
-本项目全数由ai生成，作者的唯一任务是保证其的行为及功能测试正常，本readme仅有这句话为人类所写
 
