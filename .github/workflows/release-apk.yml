@@ -18,11 +18,15 @@ jobs:
       # 未配置签名 secrets 时为空字符串 → 还原步骤自动跳过，退回 debug 签名
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
+      # ⚠️ 这里**不要**加 fetch-tags: true。
+      # 实测（v0.4.0 首次发版，run 36978078963）：tag 事件下它会变成
+      #   git fetch --tags ... +<sha>:refs/tags/<tag>
+      # 两个来源指向同一个目标，git 直接报
+      #   fatal: Cannot fetch both <sha> and refs/tags/<tag> to refs/tags/<tag>
+      # 连 checkout 都过不去，整条发版流水线当场失败。
+      # 默认（fetch-tags: false）走的是 `+refs/tags/<tag>:refs/tags/<tag>`，
+      # 能正常取到 annotated tag 对象，发布步骤照样读得到「本次更新」注释。
       - uses: actions/checkout@v4
-        with:
-          # 发布步骤要读 annotated tag 的注释作为 Release 的「本次更新」。
-          # tag 事件下 checkout 本就会取到该 tag，这里显式声明只是不依赖它的默认行为。
-          fetch-tags: true
 
       - uses: subosito/flutter-action@v2
         with:
