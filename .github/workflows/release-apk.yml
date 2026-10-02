@@ -74,13 +74,21 @@ jobs:
           # Release 正文 = 固定安装说明 + annotated tag 注释（即「本次更新」）。
           # 发版时把更新内容写进 tag 注释即可自动带进 Release，不必事后再 gh release edit 补写。
           # （不用 --generate-notes：本仓库直接推分支、没有 PR，自动生成的正文只有一行 Full Changelog。）
+          #
+          # ⚠️ 别指望工作区里的 tag 名带着注解：tag 事件下 actions/checkout 是
+          # `+<sha>:refs/tags/<tag>` 取下来的轻量引用，`git cat-file -t` 只会是 commit
+          # （v0.4.0 首次成功的那次 run 36978517752 就是这样，整段「本次更新」没进正文）。
+          # 这里显式按远端 ref 再拉一次 tag 对象到临时 tag：源≠目标，任何 checkout 版本
+          # 都不会与它冲突，且拿到的是真正的 annotated tag 对象。
+          git fetch --no-tags --depth=1 origin \
+            "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}-annotated" || true
+          notes="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}-annotated")"
           {
             echo "自动构建于 GitHub Actions，可用下方 APK 安装：arm64-v8a（主流手机）/ armeabi-v7a（32位老机）/ x86_64（模拟器）。"
-            if [ "$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
-              notes="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
-              if [ -n "$notes" ]; then
-                printf '\n## 本次更新\n\n%s\n' "$notes"
-              fi
+            if [ -n "$notes" ]; then
+              printf '\n## 本次更新\n\n%s\n' "$notes"
+            else
+              echo "（本版未填写更新说明）"
             fi
           } > "$RUNNER_TEMP/release-notes.md"
           echo "----- Release 正文 -----"
