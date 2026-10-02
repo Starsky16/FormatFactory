@@ -176,6 +176,27 @@ final List<FormatPreset> videoPresets = [
       return args;
     },
   ),
+  // 仅换容器：不重新编码，只换封装（remux）
+  FormatPreset(
+    id: 'video_remux',
+    kind: MediaKind.video,
+    name: '仅换容器',
+    extension: 'mp4',
+    description: '不重新编码，只把原有的音视频流原样装进新容器：秒级完成、画质零损失。'
+        '要求源编码与目标容器兼容（如 H.264+AAC → MP4/MKV），且不保留字幕/封面',
+    fields: const [fieldRemuxContainer],
+    buildArgs: (s) {
+      final args = <String>[
+        '-map', '0:v?', // 视频流原样保留（? = 没有视频流时不报错）
+        '-map', '0:a?', // 音频流原样保留，多音轨不会丢
+        '-c', 'copy', // 关键：整条链路不做任何重新编码
+      ];
+      // MP4/MOV 家族加 +faststart，与内置 MP4 预设行为一致
+      if (isMovContainer(s)) args.addAll(['-movflags', '+faststart']);
+      return args;
+    },
+    extFn: videoContainerExt,
+  ),
   // 自定义：上面所有参数 + 编码器/封装自由组合
   FormatPreset(
     id: 'video_custom',
