@@ -171,27 +171,41 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
     }
   }
 
-  /// 转换成功后，若该任务设置了"用户自选 SAF 目录"，把产物复制过去。
+  /// 转换成功后把产物搬到用户可见位置：
+  ///  - [ConvertTask.safTreeUri] 非空：复制进用户自选的 SAF 目录
+  ///  - [ConvertTask.mediaStoreDir] 非空：导入系统"下载"目录（默认输出的无权限兜底）
+  ///  - 两者都为空：产物已经落在最终位置，直接收尾
+  /// 搬运成功时内部工作区会**保留**一份副本，供"任务"页分享使用。
   Future<void> _saveToTarget(ConvertTask task) async {
-    final tree = task.copyTreeUri;
-    if (tree == null) {
+    final tree = task.safTreeUri;
+    final downloads = task.mediaStoreDir;
+    if (tree == null && downloads == null) {
       _finish(task, succeeded: true);
       return;
     }
-    final uri = await StorageAccess.copyToTree(
-      treeUri: tree,
-      fileName: _fileName(task.outputPath),
-      srcPath: task.outputPath,
-    );
+    final fileName = _fileName(task.outputPath);
+    final uri = tree != null
+        ? await StorageAccess.copyToTree(
+            treeUri: tree,
+            fileName: fileName,
+            srcPath: task.outputPath,
+          )
+        : await StorageAccess.copyToDownloads(
+            relativeDir: downloads!,
+            fileName: fileName,
+            srcPath: task.outputPath,
+          );
     if (uri == null) {
       _finish(
         task,
-        message: '已转换完成，但写入所选目录失败（目录可能已失效或被删）。\n'
-            '可重试，或在设置里把输出位置改回"应用专属目录"。',
+        message: tree != null
+            ? '已转换完成，但写入所选目录失败（目录可能已失效或被删）。\n'
+                '可重试，或在设置里把输出位置改回"默认目录"。'
+            : '已转换完成，但保存到系统"下载"目录失败（可能是空间不足或系统限制）。\n'
+                '可重试，或在设置里把输出位置改成"应用专属目录"。',
       );
       return;
     }
-    // 复制成功：本地保留一份内部副本供"分享"使用，故不删除
     _finish(task, succeeded: true);
   }
 

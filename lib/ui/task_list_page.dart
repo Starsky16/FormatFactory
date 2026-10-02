@@ -132,30 +132,17 @@ class _TaskTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (status == TaskStatus.succeeded) ...[
-                  if (task.copyTreeUri == null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        task.outputPath,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.outline),
-                      ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '已保存到你选择的目录（内部另留一份可分享的副本）',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.outline),
-                      ),
+                if (status == TaskStatus.succeeded)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      _outputLine,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.outline),
                     ),
-                ],
+                  ),
               ],
             ),
             trailing: status.isFinished
@@ -206,6 +193,19 @@ class _TaskTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 成功后"文件在哪"的一行说明：
+  ///  - 直接写最终目录（默认目录 / 应用专属目录）：显示真实路径
+  ///  - SAF / 系统下载目录：提示已搬运，并说明内部仍留一份可分享的副本
+  String get _outputLine {
+    if (task.safTreeUri != null) {
+      return '已保存到你选择的目录（内部另留一份可分享的副本）';
+    }
+    if (task.mediaStoreDir != null) {
+      return '已保存到系统"下载"目录 ${task.mediaStoreDir}（内部另留一份可分享的副本）';
+    }
+    return task.outputPath;
   }
 
   IconData _statusIcon(TaskStatus s) => switch (s) {
