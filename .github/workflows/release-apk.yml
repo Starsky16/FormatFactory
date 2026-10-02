@@ -20,7 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # 发布步骤要读 annotated tag 的注释作为 Release 的「本次更新」，需确保 tag 对象在本地
+          # 发布步骤要读 annotated tag 的注释作为 Release 的「本次更新」。
+          # tag 事件下 checkout 本就会取到该 tag，这里显式声明只是不依赖它的默认行为。
           fetch-tags: true
 
       - uses: subosito/flutter-action@v2

@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/Starsky16/format_factory_Android?label=Download)](https://github.com/Starsky16/format_factory_Android/releases/latest)
 [![License](https://img.shields.io/github/license/Starsky16/format_factory_Android)](LICENSE)
 
-一款 Android 上的"格式工厂"：把视频、音频、图片转换成你想要的格式；还能把网易云/QQ音乐/酷狗下载的**加密音乐还原成普通格式**、把 B 站客户端缓存的视频**无损合并成普通 MP4**。全部处理都在手机本地完成、**不联网也不上传**——应用未申请 `INTERNET` 权限（`android/app/src/main/AndroidManifest.xml` 与本项目全部依赖的清单里均无该声明，可自行核查）。
+一款 Android 上的"格式工厂"：把视频、音频、图片转换成你想要的格式；还能把网易云/QQ音乐/酷狗下载的**加密音乐还原成普通格式**、把 B 站客户端缓存的视频**无损合并成普通 MP4**。全部处理都在手机本地完成、**不联网也不上传**——**发布版**未申请 `INTERNET` 权限（`android/app/src/main/AndroidManifest.xml` 与本项目全部依赖的清单里均无该声明，可自行核查；`debug`/`profile` 开发构建按 Flutter 模板默认带此权限，与发布版无关）。
 
 ## 🤖 AI 辅助声明
 
@@ -69,7 +69,7 @@
 1. 打开首页点"**视频/音频/图片转换**"→ 选文件（可多选）→ 选目标格式和参数 → 开始转换；进度在底部"任务"页实时显示。
 2. 首页"**音乐脱壳**"→ 选加密音乐 → 加入任务队列，解出的原始音频自动保存。
 3. 首页"**B站缓存转视频**"→ 选到 B 站客户端的缓存目录 → 勾选要导出的视频 → 开始合并，几秒后得到可任意播放/分享的 MP4。
-4. "**设置**"页可调整三类输出位置、读取文件方式、通知开关、并行任务数（1~4，1 为串行；视频软编建议 1~2）。
+4. "**设置**"页可调整三类输出位置、读取文件方式、转码通知开关、并行任务数（1~4，1 为串行；视频软编建议 1~2）。
 
 ## ❓ 常见问题
 
