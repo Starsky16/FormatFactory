@@ -8,6 +8,7 @@ import 'dart:io';
 ///   download/【视频 id】/
 ///       c_【cid】/                 （老版本是无前缀的 【cid】）
 ///           entry.json              视频/分P信息（标题、时长、是否下载完成）
+///                                   普通投稿读 page_data，番剧/影视读 ep（index_title / index）
 ///           cover.jpg / danmaku.xml 封面与弹幕（与本功能无关）
 ///           【qn 清晰度，如 16/80】/
 ///               index.json          分片索引（本功能不依赖）
@@ -271,6 +272,7 @@ class _Info {
     this.completed = true,
     this.duration,
     this.entryDir,
+    this.isEp = false,
   });
 
   final String? title;
@@ -280,14 +282,28 @@ class _Info {
   final bool completed;
   final double? duration;
 
+  /// 是否来自番剧 / 影视缓存（`ep` 结构）。
+  ///
+  /// 番剧的分集标题必须一直显示（同一部番的多集在列表里名字都一样），
+  /// 普通投稿则只在多分 P 时才带分 P 名 —— 所以要把这个来源记下来。
+  final bool isEp;
+
   /// 最近一次读到的 entry.json 所在目录，用于把同一视频的多清晰度归并。
   final String? entryDir;
 
   /// 用一份 entry.json 覆盖当前上下文。
+  ///
+  /// B 站缓存有两种 entry.json 结构，都要认：
+  ///  - 普通投稿：`page_data{ part, page, download_title, download_subtitle }`
+  ///  - 番剧 / 影视：`ep{ index_title, index }`（没有 page_data，
+  ///    只读 page_data 会让番剧缓存拿到空标题、在列表里消失或重名）
   _Info merge(Map<String, Object?> json, String dir) {
     final pageData = json['page_data'];
     final page =
         pageData is Map ? pageData.cast<String, Object?>() : const <String, Object?>{};
+    final epData = json['ep'];
+    final ep = epData is Map ? epData.cast<String, Object?>() : const <String, Object?>{};
+    final epPart = _asText(ep['index_title']);
     final ms = _asInt(json['total_time_milli']);
     final isCompleted = json['is_completed'];
     return _Info(
@@ -296,25 +312,36 @@ class _Info {
           title,
       part: _asText(page['part']) ??
           _asText(page['download_subtitle']) ??
+          epPart ??
           part,
-      page: _asInt(page['page']) ?? this.page,
+      page: _asInt(page['page']) ?? _asInt(ep['index']) ?? this.page,
       quality: _asText(json['quality_pithy_description']) ??
           _asText(json['type_tag']) ??
           quality,
       completed: isCompleted is bool ? isCompleted : completed,
       duration: ms != null && ms > 0 ? ms / 1000 : duration,
       entryDir: dir,
+      // 清晰度层的 entry.json 通常没有 ep，靠上下文往下传。
+      isEp: epPart != null || isEp,
     );
   }
 
   /// 真正展示的标题：多分P时带上分P名，单P时只用视频标题（避免和分P名重复）。
+  ///
+  /// 番剧 / 影视例外：每一集都是独立条目，分集标题必须一直带上，
+  /// 否则同一部番缓存的多集在列表里会全部重名（且都不带「第 N 话」）。
   String get displayTitle {
     final base = (title ?? '').trim();
     final sub = (part ?? '').trim();
     final no = page ?? 1;
     var name = base.isNotEmpty ? base : sub;
-    if (sub.isNotEmpty && sub != name && no > 1) {
-      name = '$name - P$no $sub';
+    if (sub.isNotEmpty && sub != name) {
+      if (isEp) {
+        // ep.index_title 本身一般已含「第 N 话」，不再补 P 号，避免「第1话 … - P1」这种怪名
+        name = '$name - $sub';
+      } else if (no > 1) {
+        name = '$name - P$no $sub';
+      }
     }
     return name.trim();
   }

@@ -92,6 +92,57 @@ void main() {
     expect(item.qualityTag, '999'); // 条目里没有清晰度 → 退回清晰度目录名
   });
 
+  test('番剧缓存（ep 结构）：读出分集标题与集号，标题带上分集名', () async {
+    // 番剧没有 page_data，分集信息在 ep{index_title, index} 里
+    writeEntry('104001', <String, Object?>{
+      'title': '某番剧',
+      'type_tag': '番剧',
+      'is_completed': true,
+      'total_time_milli': 1440000,
+      'ep': <String, Object?>{'index_title': '第1话 出发', 'index': 1},
+    });
+    writeFile('104001/16/video.m4s', '0123456789');
+    writeFile('104001/16/audio.m4s', '01234');
+
+    final item = (await BiliCache.scan(root.path)).single;
+
+    // 集号是 1（不是多分P），但番剧必须把分集名带出来，否则多集重名
+    expect(item.title, '某番剧 - 第1话 出发');
+    expect(item.durationSeconds, closeTo(1440, 0.001));
+    expect(item.hasVideo, isTrue);
+    expect(item.audioPath, isNotNull);
+  });
+
+  test('番剧缓存：分集信息在外层、清晰度层 entry.json 没有 ep 时也能继承', () async {
+    writeEntry('104002', <String, Object?>{
+      'title': '某番剧 第二季',
+      'ep': <String, Object?>{'index_title': '第3话 重逢', 'index': 3},
+    });
+    // 清晰度层的 entry.json 通常只有清晰度/完成度，没有 ep
+    writeEntry('104002/c_1', <String, Object?>{
+      'is_completed': false,
+      'total_time_milli': 600000,
+      'quality_pithy_description': '1080P',
+    });
+    writeFile('104002/c_1/80/video.m4s', 'v');
+    writeFile('104002/c_1/80/audio.m4s', 'a');
+
+    final item = (await BiliCache.scan(root.path)).single;
+
+    expect(item.title, '某番剧 第二季 - 第3话 重逢');
+    expect(item.qualityTag, '1080P');
+    expect(item.complete, isFalse);
+  });
+
+  test('普通投稿不带 ep 时行为不变：单P只用视频标题', () async {
+    writeEntry('100/c_1', entryJson(title: '普通视频', part: '分P名', page: 1));
+    writeFile('100/c_1/16/video.m4s', 'v');
+    writeFile('100/c_1/16/audio.m4s', 'a');
+
+    // page=1 且非番剧 → 不带后缀（避免与视频标题重复）
+    expect((await BiliCache.scan(root.path)).single.title, '普通视频');
+  });
+
   test('只有音频的缓存：标记为没有视频流', () async {
     writeEntry('100/c_1', entryJson(title: '纯音频'));
     writeFile('100/c_1/16/audio.m4s', 'a');
