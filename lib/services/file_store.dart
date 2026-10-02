@@ -59,6 +59,9 @@ class FileStore {
   /// 公共输出根目录名（位于手机 Download 下）。
   static const String publicDirName = 'FormatExport';
 
+  /// 可写性探针文件名（写在用户的输出目录里，随即删除）。
+  static const String probeFileName = '.format_factory_write_test';
+
   /// MediaStore 导入用的相对路径：`Download/FormatExport/<类别>`。
   static String mediaStoreDirFor(MediaKind kind) =>
       'Download/$publicDirName/${kind.dirName}';
@@ -101,15 +104,34 @@ class FileStore {
     }
     // 内建文件浏览器选的绝对路径：直接写 <根>/<类别>
     final dir = Directory('$target${Platform.pathSeparator}${kind.dirName}');
+    if (await ensureWritable(dir)) return OutputTarget(dir: dir);
+    // 没有写权限（如未开启"所有文件访问"）：退回应用专属目录，别让任务白跑
+    return OutputTarget(
+      dir: await appOutputDir(kind),
+      warning: '无法写入所选目录 $target，本次已改存到应用专属目录',
+    );
+  }
+
+  /// 本进程内已验证过可写的目录（避免每个文件都写一次探针）。
+  static final Set<String> _verifiedWritable = {};
+
+  /// 确保 [dir] 存在并且**真的能写**；能写返回 true。
+  ///
+  /// 只调 `create` 不够：目录已存在但不可写时（只读存储卡、系统受限目录、
+  /// 拿了权限又被回收等）`create` 不会报错，问题会拖到 FFmpeg 阶段才以权限错误
+  /// 暴露出来。所以这里写一个探针文件验证，写完立刻删掉。
+  static Future<bool> ensureWritable(Directory dir) async {
+    if (_verifiedWritable.contains(dir.path)) return true;
     try {
       if (!await dir.exists()) await dir.create(recursive: true);
-      return OutputTarget(dir: dir);
+      final probe =
+          File('${dir.path}${Platform.pathSeparator}$probeFileName');
+      await probe.writeAsString('', flush: true);
+      await probe.delete();
+      _verifiedWritable.add(dir.path);
+      return true;
     } catch (_) {
-      // 没有写权限（如未开启"所有文件访问"）：退回应用专属目录，别让任务白跑
-      return OutputTarget(
-        dir: await appOutputDir(kind),
-        warning: '无法写入所选目录 $target，本次已改存到应用专属目录',
-      );
+      return false;
     }
   }
 

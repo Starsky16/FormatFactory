@@ -40,6 +40,39 @@ void main() {
     });
   });
 
+  group('ensureWritable（自选目录可写性探针）', () {
+    test('可写目录返回 true 且不留探针文件', () async {
+      final dir = Directory.systemTemp.createTempSync('ff_writable');
+      addTearDown(() => dir.deleteSync(recursive: true));
+
+      expect(await FileStore.ensureWritable(dir), isTrue);
+      final leftovers = dir
+          .listSync()
+          .where((e) => e.path.contains(FileStore.probeFileName))
+          .toList();
+      expect(leftovers, isEmpty, reason: '探针文件必须自行删掉');
+    });
+
+    test('目录不存在时会先建出来', () async {
+      final base = Directory.systemTemp.createTempSync('ff_writable');
+      addTearDown(() => base.deleteSync(recursive: true));
+      final sub = Directory(
+          '${base.path}${Platform.pathSeparator}a${Platform.pathSeparator}b');
+
+      expect(await FileStore.ensureWritable(sub), isTrue);
+      expect(sub.existsSync(), isTrue);
+    });
+
+    test('路径被同名文件占住时返回 false（不抛异常）', () async {
+      final base = Directory.systemTemp.createTempSync('ff_writable');
+      addTearDown(() => base.deleteSync(recursive: true));
+      final blocker = File('${base.path}${Platform.pathSeparator}blocker')
+        ..writeAsStringSync('x');
+
+      expect(await FileStore.ensureWritable(Directory(blocker.path)), isFalse);
+    });
+  });
+
   group('OutputPlan', () {
     test('needsExport 只在需要搬运时为真', () {
       const none = OutputPlan(path: '/a/b.mp4');
