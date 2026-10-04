@@ -107,6 +107,10 @@ class KgmUnlocker {
                         out.write(buf, 0, n)
                         offset += n
                     }
+                } catch (t: Throwable) {
+                    // 失败收尾：删掉已创建的半成品（Dart 侧拿不到文件名，删不到）
+                    PartialOutputCleanup.remove(out, outPath)
+                    throw t
                 } finally {
                     out?.close()
                 }

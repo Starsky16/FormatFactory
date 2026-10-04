@@ -120,6 +120,10 @@ class NcmUnlocker {
                         }
                         output?.write(buf, 0, n)
                     }
+                } catch (t: Throwable) {
+                    // 失败收尾：删掉已创建的半成品（Dart 侧拿不到文件名，删不到）
+                    PartialOutputCleanup.remove(output, outputPath)
+                    throw t
                 } finally {
                     output?.close()
                 }

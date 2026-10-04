@@ -437,7 +437,13 @@ class QmcUnlocker {
             val fmt = AudioFormatDetect.detect(head)
                 ?: throw IllegalStateException("无法识别解密后的音频格式")
             val outFile = File(destDir, uniqueOut(destDir, src.nameWithoutExtension, fmt))
-            outFile.writeBytes(decrypted)
+            try {
+                outFile.writeBytes(decrypted)
+            } catch (t: Throwable) {
+                // 失败收尾：单次写盘中途失败也会留下半截文件
+                outFile.delete()
+                throw t
+            }
             return Result(outFile.absolutePath, fmt)
         }
     }
