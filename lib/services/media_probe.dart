@@ -15,6 +15,7 @@ class MediaProbe {
 
       var hasVideo = false;
       var hasAudio = false;
+      var hasAttachedPic = false;
       String? videoCodec;
       String? audioCodec;
       int? width;
@@ -30,6 +31,12 @@ class MediaProbe {
           videoCodec ??= stream.getCodec();
           width ??= stream.getWidth();
           height ??= stream.getHeight();
+          // disposition.attached_pic == 1 → 该流是内嵌封面而非真实画面
+          final disposition = stream.getProperty('disposition');
+          if (disposition is Map &&
+              disposition['attached_pic']?.toString() == '1') {
+            hasAttachedPic = true;
+          }
         } else if (type == 'audio') {
           hasAudio = true;
           audioCodec ??= stream.getCodec();
@@ -46,6 +53,7 @@ class MediaProbe {
         height: height,
         bitrate: bitrate,
         fileBytes: 0, // 由调用方结合 File 补齐展示（避免同步 IO）
+        hasAttachedPic: hasAttachedPic,
       );
     } catch (_) {
       return null;

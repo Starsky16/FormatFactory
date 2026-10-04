@@ -129,7 +129,7 @@ class _BiliPageState extends ConsumerState<BiliPage> {
     setState(() => _submitting = true);
 
     final messenger = ScaffoldMessenger.of(context);
-    final target = ref.read(appSettingsProvider).videoTarget;
+    final target = ref.read(appSettingsProvider).outputTarget;
     final now = DateTime.now();
     final reencode = _reencode;
     final preset =
@@ -140,6 +140,8 @@ class _BiliPageState extends ConsumerState<BiliPage> {
 
     final tasks = <ConvertTask>[];
     String? warning;
+    // 同批任务的批内去重：番剧多集同名时路径一次性生成，防止撞车
+    final claimed = <String>{};
     for (final item in picked) {
       // 纯音频缓存输出 m4a；重新编码只对“有画面”的条目有意义
       final doEncode = reencode && item.hasVideo;
@@ -150,6 +152,7 @@ class _BiliPageState extends ConsumerState<BiliPage> {
         '$name.$ext',
         ext,
         target: target,
+        claimed: claimed,
       );
       warning ??= plan.warning;
       tasks.add(ConvertTask(

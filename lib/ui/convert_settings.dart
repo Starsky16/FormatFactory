@@ -77,9 +77,11 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
     // 输出目标：默认目录 Download/FormatExport / 应用专属目录 / 用户自选目录
     final target = ref.read(appSettingsProvider).targetOf(widget.kind);
     String? warning;
+    // 同批任务的批内去重：多个同名文件入队时路径一次性生成，防止撞车
+    final claimed = <String>{};
     for (final f in widget.files) {
-      final plan =
-          await FileStore.plan(widget.kind, f.name, outExt, target: target);
+      final plan = await FileStore.plan(widget.kind, f.name, outExt,
+          target: target, claimed: claimed);
       warning ??= plan.warning;
       tasks.add(ConvertTask(
         id: TaskQueue.newId(),
@@ -94,6 +96,7 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
         safTreeUri: plan.safTreeUri,
         mediaStoreDir: plan.mediaStoreDir,
         inputDurationSeconds: f.info?.durationSeconds,
+        inputHasAttachedPic: f.info?.hasAttachedPic ?? false,
       ));
     }
     if (!mounted) return;

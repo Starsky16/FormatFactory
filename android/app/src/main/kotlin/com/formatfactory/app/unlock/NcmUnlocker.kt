@@ -113,13 +113,17 @@ class NcmUnlocker {
                                 isFlac(buf) -> "flac"
                                 else -> throw IllegalStateException("无法识别解密后的音频格式")
                             }
-                            val outFile = File(destDir, uniqueName(src.nameWithoutExtension, ext))
+                            val outFile = File(destDir, uniqueName(destDir, src.nameWithoutExtension, ext))
                             output = RandomAccessFile(outFile, "rw")
                             output?.setLength(0)
                             outputPath = outFile.absolutePath
                         }
                         output?.write(buf, 0, n)
                     }
+                } catch (t: Throwable) {
+                    // 失败收尾：删掉已创建的半成品（Dart 侧拿不到文件名，删不到）
+                    PartialOutputCleanup.remove(output, outputPath)
+                    throw t
                 } finally {
                     output?.close()
                 }
@@ -138,9 +142,14 @@ class NcmUnlocker {
                 buf[2] == 'a'.code.toByte() &&
                 buf[3] == 'C'.code.toByte()
 
-        private fun uniqueName(base: String, ext: String): String {
-            val suffix = System.currentTimeMillis() % 100000
-            return "$base$suffix.$ext"
+        internal fun uniqueName(destDir: File, base: String, ext: String): String {
+            var name = "$base.$ext"
+            var n = 2
+            while (File(destDir, name).exists()) {
+                name = "${base}_$n.$ext"
+                n++
+            }
+            return name
         }
 
         private fun readIntLE(raf: RandomAccessFile): Int {

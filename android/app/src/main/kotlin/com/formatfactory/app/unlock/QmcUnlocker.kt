@@ -371,9 +371,14 @@ class QmcUnlocker {
         private val QMC1_EXTS = setOf("qmc0", "qmc2", "qmc3", "qmcflac", "qmcogg")
         private val QMC2_EXTS = setOf("mgg", "mgg0", "mgg1", "mggl", "mflac", "mflac0", "mflach")
 
-        private fun uniqueOut(base: String, ext: String): String {
-            val suffix = System.currentTimeMillis() % 100000
-            return "$base$suffix.$ext"
+        internal fun uniqueOut(destDir: File, base: String, ext: String): String {
+            var name = "$base.$ext"
+            var n = 2
+            while (File(destDir, name).exists()) {
+                name = "${base}_$n.$ext"
+                n++
+            }
+            return name
         }
 
         @Throws(Exception::class)
@@ -431,8 +436,14 @@ class QmcUnlocker {
             val head = decrypted.copyOf(minOf(8, decrypted.size))
             val fmt = AudioFormatDetect.detect(head)
                 ?: throw IllegalStateException("无法识别解密后的音频格式")
-            val outFile = File(destDir, uniqueOut(src.nameWithoutExtension, fmt))
-            outFile.writeBytes(decrypted)
+            val outFile = File(destDir, uniqueOut(destDir, src.nameWithoutExtension, fmt))
+            try {
+                outFile.writeBytes(decrypted)
+            } catch (t: Throwable) {
+                // 失败收尾：单次写盘中途失败也会留下半截文件
+                outFile.delete()
+                throw t
+            }
             return Result(outFile.absolutePath, fmt)
         }
     }

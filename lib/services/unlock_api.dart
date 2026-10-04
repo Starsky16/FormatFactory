@@ -10,11 +10,15 @@ const Set<String> kQmcExtensions = {
 /// 酷狗 KGM 系列（纯本地 XOR，无需外部密钥）。
 const Set<String> kKgmExtensions = {'kgm', 'kgma', 'vpr'};
 
+/// 酷我 KWM：仅 v1（纯离线 XOR）；v2 需设备密钥，原生侧检测到会明确报错。
+const Set<String> kKwmExtensions = {'kwm'};
+
 /// 文件选择/浏览器里允许的全部加密音乐扩展名。
 final List<String> kAllUnlockExtensions = [
   'ncm',
   ...kQmcExtensions,
   ...kKgmExtensions,
+  ...kKwmExtensions,
 ];
 
 /// 调 Android 原生"脱壳"通道（MainActivity 里的 com.formatfactory.app/unlock）。
@@ -35,6 +39,7 @@ class UnlockApi {
       'ncm' => 'unlockNcm',
       _ when kQmcExtensions.contains(format) => 'unlockQmc',
       _ when kKgmExtensions.contains(format) => 'unlockKgm',
+      _ when kKwmExtensions.contains(format) => 'unlockKwm',
       _ => throw Exception('暂不支持的脱壳格式：.$format'),
     };
     try {

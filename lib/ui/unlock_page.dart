@@ -19,6 +19,7 @@ String unlockLabelFor(String ext) => switch (ext) {
       _ when kQmcExtensions.contains(ext) => 'QMC 脱壳',
       'vpr' => 'VPR 脱壳',
       _ when kKgmExtensions.contains(ext) => 'KGM 脱壳',
+      _ when kKwmExtensions.contains(ext) => 'KWM 脱壳',
       _ => '音乐脱壳',
     };
 
@@ -194,7 +195,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
             const Text('选择加密音乐文件'),
             const SizedBox(height: 8),
             Text(
-              '支持网易云 .ncm、QQ .qmc/.mflac/.mgg、酷狗 .kgm/.kgma/.vpr\n还原为原始 flac / mp3 / ogg 等（不转码）\n解密进度会显示在"任务"页',
+              '支持网易云 .ncm、QQ .qmc/.mflac/.mgg、酷狗 .kgm/.kgma/.vpr、酷我 .kwm（v1）\n还原为原始 flac / mp3 / ogg 等（不转码）\n解密进度会显示在"任务"页',
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),

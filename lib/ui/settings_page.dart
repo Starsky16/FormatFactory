@@ -11,7 +11,7 @@ import '../services/storage_access.dart';
 import '../state/app_settings.dart';
 import 'file_browser_page.dart';
 
-/// 设置页：输出位置（视频/音频/图片各自设置）+ 读取文件方式。
+/// 设置页：输出位置 + 读取文件方式。
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -83,8 +83,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _sectionTitle('输出位置（三类分别设置）'),
-        for (final kind in MediaKind.values) _outputTile(kind),
+        _sectionTitle('输出位置'),
+        _outputTile(),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -256,9 +256,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Widget _outputTile(MediaKind kind) {
+  Widget _outputTile() {
     final settings = ref.watch(appSettingsProvider);
-    final target = settings.targetOf(kind);
+    final target = settings.outputTarget;
     final isDefault = target == AppSettings.targetDefault;
     final isApp = target == AppSettings.targetApp;
     final theme = Theme.of(context);
@@ -267,16 +267,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: theme.colorScheme.secondaryContainer,
-          child: Icon(
-            switch (kind) {
-              MediaKind.video => Icons.videocam_outlined,
-              MediaKind.audio => Icons.music_note,
-              MediaKind.image => Icons.image_outlined,
-            },
-            size: 20,
-          ),
+          child: const Icon(Icons.folder_outlined, size: 20),
         ),
-        title: Text('${kind.label}输出位置'),
+        title: const Text('输出位置'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -287,10 +280,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     : '自定义目录'),
             if (isDefault)
               FutureBuilder<String>(
-                future: FileStore.publicDirText(kind),
+                future: FileStore.publicDirText(MediaKind.video),
                 builder: (_, snap) => Text(
                   snap.data ??
-                      'Download/${FileStore.publicDirName}/${kind.dirName}',
+                      'Download/${FileStore.publicDirName}',
                   style: theme.textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -300,7 +293,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               FutureBuilder<String>(
                 future: FileStore.appOutputDirText(),
                 builder: (_, snap) => Text(
-                  '${snap.data ?? ''}/${kind.dirName}',
+                  snap.data ?? '',
                   style: theme.textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -316,7 +309,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ],
         ),
         trailing: TextButton(
-          onPressed: () => _chooseOutput(kind),
+          onPressed: () => _chooseOutput(),
           child: const Text('更改'),
         ),
       ),
@@ -361,11 +354,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   /// 底部弹层选择输出位置：默认目录 / 应用专属目录 / 自定义目录。
-  Future<void> _chooseOutput(MediaKind kind) async {
+  Future<void> _chooseOutput() async {
     final notifier = ref.read(appSettingsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     final settings = ref.read(appSettingsProvider);
-    final current = settings.targetOf(kind);
+    final current = settings.outputTarget;
     final useBuiltinPicker = settings.dirPickerMode == 'manage';
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -373,9 +366,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              title: Text('${kind.label}输出位置'),
-              subtitle: const Text('选择转换完成的文件保存到哪里'),
+            const ListTile(
+              title: Text('输出位置'),
+              subtitle: Text('选择转换完成的文件保存到哪里'),
             ),
             ListTile(
               leading: const Icon(Icons.download_outlined),
@@ -410,19 +403,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (action == null) return;
     if (action == 'default') {
-      await notifier.setOutput(kind, AppSettings.targetDefault);
+      await notifier.setOutput(MediaKind.video, AppSettings.targetDefault);
       return;
     }
     if (action == 'app') {
-      await notifier.setOutput(kind, AppSettings.targetApp);
+      await notifier.setOutput(MediaKind.video, AppSettings.targetApp);
       return;
     }
-    await _pickCustomDir(kind, notifier, messenger, useBuiltinPicker);
+    await _pickCustomDir(notifier, messenger, useBuiltinPicker);
   }
 
   /// 按"自定义目录的选择方式"打开内置文件浏览器或系统 SAF 选择器。
   Future<void> _pickCustomDir(
-    MediaKind kind,
     AppSettingsNotifier notifier,
     ScaffoldMessengerState messenger,
     bool useBuiltinPicker,
@@ -442,22 +434,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             extensions: const [],
             pickDirectory: true,
             initialPath: '/storage/emulated/0',
-            title: '选择${kind.label}输出目录',
+            title: '选择输出目录',
           ),
         ),
       );
       if (picked == null || picked.isEmpty) return;
       final root = picked.first;
-      await notifier.setOutput(kind, root);
+      await notifier.setOutput(MediaKind.video, root);
       messenger.showSnackBar(SnackBar(
-        content: Text('已设置输出目录：$root${Platform.pathSeparator}${kind.dirName}'),
+        content: Text('已设置输出目录：$root'),
       ));
       return;
     }
     // 系统目录选择器（原生 SAF）
     final uri = await StorageAccess.pickDirectory();
     if (uri == null) return; // 用户取消
-    await notifier.setOutput(kind, uri);
+    await notifier.setOutput(MediaKind.video, uri);
     messenger.showSnackBar(const SnackBar(content: Text('已设置输出目录')));
   }
 

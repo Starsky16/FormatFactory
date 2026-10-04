@@ -17,6 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
 import com.formatfactory.app.unlock.KgmUnlocker
+import com.formatfactory.app.unlock.KwmUnlocker
 import com.formatfactory.app.unlock.NcmUnlocker
 import com.formatfactory.app.unlock.QmcUnlocker
 
@@ -149,6 +150,18 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                 runAsync(result) {
                     val isVpr = format == "vpr"
                     val r = KgmUnlocker.unlock(File(src), File(destDir), isVpr)
+                    mapOf("path" to r.outputPath, "ext" to r.ext)
+                }
+            }
+            "unlockKwm" -> {
+                val src = call.argument<String>("src")
+                val destDir = call.argument<String>("destDir")
+                if (src == null || destDir == null) {
+                    result.error("bad_args", "缺少参数", null)
+                    return
+                }
+                runAsync(result) {
+                    val r = KwmUnlocker.unlock(File(src), File(destDir))
                     mapOf("path" to r.outputPath, "ext" to r.ext)
                 }
             }
