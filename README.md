@@ -45,8 +45,10 @@
 | 网易云 | `.ncm` | 原始 flac / mp3 |
 | QQ 音乐 | `.qmc0/.qmc2/.qmc3/.qmcflac/.qmcogg`、`.mflac/.mflac0/.mflach/.mgg/.mgg0/.mgg1/.mggl` | 原始 flac / ogg / mp3 |
 | 酷狗 | `.kgm/.kgma/.vpr` | 原始 flac / mp3 / wav / ogg |
+| 酷我 | `.kwm`（仅 v1） | 原始 mp3 / flac 等 |
 
 > 说明：QQ 音乐的 `.mflac/.mgg` 等需要文件**内嵌密钥**（新下载的多数带有 QTag/V1 尾部）才能离线解密；个别文件未带密钥会明确提示，无法离线处理。
+> 酷我 `.kwm` 仅支持 v1（纯离线解密）；v2 需要设备密钥（root），本应用不支持，检测到会明确报错。
 
 ### B站缓存转视频（无损合并）
 手机 B 站客户端缓存下来的视频是 DASH 分片（`video.m4s` + `audio.m4s`），单独拿出来既不能播放也不好分享。
@@ -60,6 +62,8 @@
 | 去重 | 同一视频缓存了多个清晰度时，只保留清晰度最高的那份 |
 
 > 缓存目录通常在 `Android/data/tv.danmaku.bili/download`（部分版本在 `Android/data/com.bilibili.app.in/download`），系统文件选择器看不到它 → 先用"文件管理权限"方式进入（见下方常见问题）。
+>
+> 注：普通视频缓存已按真实样本逐项核对；**番剧缓存**（`ep` 目录形态）暂无样本验证，仅实现了深度回退兼容（dev `e19a6fe`），如遇识别异常欢迎提 issue 附目录树。
 
 ### 其它贴心设计
 - **批量**：一次选多个文件，队列逐个处理，实时进度、可取消/重试/查看原因
