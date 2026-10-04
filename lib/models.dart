@@ -90,6 +90,7 @@ class ConvertTask {
     this.safTreeUri,
     this.mediaStoreDir,
     this.inputDurationSeconds,
+    this.inputHasAttachedPic = false,
     this.status = TaskStatus.queued,
     this.progress = 0,
     this.error,
@@ -114,6 +115,10 @@ class ConvertTask {
 
   /// 源时长（秒），FFprobe 读出来用于换算进度百分比。
   final double? inputDurationSeconds;
+
+  /// 源文件的第一个视频流是否是内嵌封面（attached_pic）。
+  /// 音频输出映射封面时用：为真时去掉 -vn 并把封面流复制进产物。
+  final bool inputHasAttachedPic;
 
   /// 非空 = 转换完成后要把产物复制进这个"用户自选目录"（SAF content:// uri）。
   final String? safTreeUri;
@@ -157,6 +162,7 @@ class ConvertTask {
       safTreeUri: safTreeUri,
       mediaStoreDir: mediaStoreDir,
       inputDurationSeconds: inputDurationSeconds,
+      inputHasAttachedPic: inputHasAttachedPic,
       status: status ?? this.status,
       progress: progress ?? this.progress,
       error: clearError ? null : (error ?? this.error),
@@ -176,6 +182,7 @@ class MediaInfo {
     this.height,
     this.bitrate,
     this.fileBytes = 0,
+    this.hasAttachedPic = false,
   });
 
   final double durationSeconds;
@@ -187,6 +194,10 @@ class MediaInfo {
   final int? height;
   final int? bitrate; // 位每秒
   final int fileBytes;
+
+  /// 第一个视频流是否为内嵌封面（attached_pic，常见于带封面的音乐文件）。
+  /// 音频转码映射封面用；普通视频文件为 false。
+  final bool hasAttachedPic;
 
   String get resolutionText {
     if (width != null && height != null) return '$width×$height';

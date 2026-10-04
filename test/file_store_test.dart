@@ -24,19 +24,46 @@ void main() {
     });
   });
 
-  group('输出文件名', () {
-    test('保留原名、加 6 位时间戳、换掉扩展名', () {
-      final dir = Directory('/tmp/out');
+  group('输出文件名（原名优先，重名加序号）', () {
+    late Directory dir;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('ff_naming');
+      addTearDown(() => dir.deleteSync(recursive: true));
+    });
+
+    test('目录空闲时保留原名，只换扩展名', () {
       final path = FileStore.pathIn(dir, '我的视频.mp4', 'mp3');
-      expect(path, startsWith(dir.path));
-      expect(path, matches(RegExp(r'我的视频_\d{6}\.mp3$')));
-      // 目录路径本身只出现一次
-      expect(path.indexOf(dir.path), 0);
+      expect(path, '${dir.path}${Platform.pathSeparator}我的视频.mp3');
+    });
+
+    test('重名时加 _2 序号，不覆盖已有文件', () {
+      File('${dir.path}${Platform.pathSeparator}song.mp3')
+          .writeAsStringSync('x');
+      final path = FileStore.pathIn(dir, 'song.flac', 'mp3');
+      expect(path, '${dir.path}${Platform.pathSeparator}song_2.mp3');
+    });
+
+    test('序号被占时继续递增到 _3', () {
+      for (final name in ['song.mp3', 'song_2.mp3']) {
+        File('${dir.path}${Platform.pathSeparator}$name').writeAsStringSync('x');
+      }
+      final path = FileStore.pathIn(dir, 'song.flac', 'mp3');
+      expect(path, '${dir.path}${Platform.pathSeparator}song_3.mp3');
+    });
+
+    test('claimed 集合内的路径视为已占用，选中的路径会回填', () {
+      final claimed = <String>{};
+      final first = FileStore.pathIn(dir, 'song.flac', 'mp3', claimed: claimed);
+      final second =
+          FileStore.pathIn(dir, 'song.flac', 'mp3', claimed: claimed);
+      expect(first, '${dir.path}${Platform.pathSeparator}song.mp3');
+      expect(second, '${dir.path}${Platform.pathSeparator}song_2.mp3');
+      expect(claimed, containsAll([first, second]));
     });
 
     test('没有扩展名的输入也能兜底', () {
-      final path = FileStore.pathIn(Directory('/tmp/out'), 'noext', 'mp4');
-      expect(path, matches(RegExp(r'noext_\d{6}\.mp4$')));
+      final path = FileStore.pathIn(dir, 'noext', 'mp4');
+      expect(path, '${dir.path}${Platform.pathSeparator}noext.mp4');
     });
   });
 

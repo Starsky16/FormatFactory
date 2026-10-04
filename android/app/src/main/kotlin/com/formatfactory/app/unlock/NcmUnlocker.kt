@@ -113,7 +113,7 @@ class NcmUnlocker {
                                 isFlac(buf) -> "flac"
                                 else -> throw IllegalStateException("无法识别解密后的音频格式")
                             }
-                            val outFile = File(destDir, uniqueName(src.nameWithoutExtension, ext))
+                            val outFile = File(destDir, uniqueName(destDir, src.nameWithoutExtension, ext))
                             output = RandomAccessFile(outFile, "rw")
                             output?.setLength(0)
                             outputPath = outFile.absolutePath
@@ -138,9 +138,14 @@ class NcmUnlocker {
                 buf[2] == 'a'.code.toByte() &&
                 buf[3] == 'C'.code.toByte()
 
-        private fun uniqueName(base: String, ext: String): String {
-            val suffix = System.currentTimeMillis() % 100000
-            return "$base$suffix.$ext"
+        internal fun uniqueName(destDir: File, base: String, ext: String): String {
+            var name = "$base.$ext"
+            var n = 2
+            while (File(destDir, name).exists()) {
+                name = "${base}_$n.$ext"
+                n++
+            }
+            return name
         }
 
         private fun readIntLE(raf: RandomAccessFile): Int {

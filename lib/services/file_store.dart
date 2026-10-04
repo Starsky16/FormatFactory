@@ -136,34 +136,49 @@ class FileStore {
   }
 
   /// 生成一次输出的完整计划（输出文件路径 + 收尾搬运方式）。
+  ///
+  /// [claimed] 用于同批任务的批内去重：一批里多个同名文件入队时路径是
+  /// 一次性生成的，只查磁盘会让第二个同名文件拿到同一路径。
   static Future<OutputPlan> plan(
     MediaKind kind,
     String inputName,
     String presetExtension, {
     required String target,
+    Set<String>? claimed,
   }) async {
     final out = await resolve(kind, target);
     return OutputPlan(
-      path: pathIn(out.dir, inputName, presetExtension),
+      path: pathIn(out.dir, inputName, presetExtension, claimed: claimed),
       safTreeUri: out.safTreeUri,
       mediaStoreDir: out.mediaStoreDir,
       warning: out.warning,
     );
   }
 
-  /// 在 [dir] 里按"原名 + 时间戳"生成一个不易重名的输出路径。
+  /// 在 [dir] 里生成输出路径：**优先沿用原文件名**（只换扩展名）；
+  /// 目标文件已存在（或在 [claimed] 批内集合里）时追加 `_2`、`_3`… 序号，
+  /// 绝不覆盖已有文件。
   static String pathIn(
     Directory dir,
     String inputName,
-    String presetExtension,
-  ) {
+    String presetExtension, {
+    Set<String>? claimed,
+  }) {
     final dot = inputName.lastIndexOf('.');
     final base = dot > 0 ? inputName.substring(0, dot) : inputName;
-    // 用"微秒时间戳后 6 位"避免重名
-    final stamp = (DateTime.now().microsecondsSinceEpoch % 1000000)
-        .toString()
-        .padLeft(6, '0');
-    return '${dir.path}${Platform.pathSeparator}${base}_$stamp.$presetExtension';
+    var candidate = '$base.$presetExtension';
+    var n = 2;
+    while (true) {
+      final path =
+          '${dir.path}${Platform.pathSeparator}$candidate';
+      if ((claimed == null || !claimed.contains(path)) &&
+          !File(path).existsSync()) {
+        claimed?.add(path);
+        return path;
+      }
+      candidate = '${base}_$n.$presetExtension';
+      n++;
+    }
   }
 
   /// 默认目录：能直写就直写，否则走"内部工作区 + MediaStore 导入"。

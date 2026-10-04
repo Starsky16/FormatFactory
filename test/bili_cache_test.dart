@@ -201,10 +201,11 @@ void main() {
     expect(cmd, endsWith('"/out/视频.mp4"'));
   });
 
-  test('只有一路输入时不加 -map，避免选流失败', () {
+  test('只有一路输入时不加流选择 -map，避免选流失败', () {
     final cmd = FfmpegEngine.buildCommand(copyTask());
     expect(cmd, contains('-i "/cache/16/video.m4s"'));
-    expect(cmd, isNot(contains('-map')));
+    // 注意：-map_metadata 0 是标签映射不是流选择，允许出现
+    expect(cmd, isNot(contains('-map ')));
     expect(cmd, contains('-c copy'));
   });
 
