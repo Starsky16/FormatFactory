@@ -129,7 +129,7 @@ class _BiliPageState extends ConsumerState<BiliPage> {
     setState(() => _submitting = true);
 
     final messenger = ScaffoldMessenger.of(context);
-    final target = ref.read(appSettingsProvider).videoTarget;
+    final target = ref.read(appSettingsProvider).outputTarget;
     final now = DateTime.now();
     final reencode = _reencode;
     final preset =
