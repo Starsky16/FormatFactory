@@ -100,6 +100,9 @@ String _partPath(String path, int part) {
   return '${path.substring(0, dot)}_part$part${path.substring(dot)}';
 }
 
+/// 单条 FFmpeg 命令的执行结果。
+enum _ExecResult { success, failed, canceled }
+
 class TaskQueue extends Notifier<List<ConvertTask>> {
   /// 正在运行的任务数（不应超过并行上限）。
   int _active = 0;
@@ -116,6 +119,9 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
 
   /// 通知进度节流：记录上次通知的整百分比。
   int _lastNotifiedPct = -1;
+
+  /// [finishOnFail] 为假（硬编试跑）失败时暂存的原因，回退软编时参考。
+  String? _lastFailMessage;
 
   /// 通知开关是否开启。
   bool get _notifyEnabled =>
@@ -173,44 +179,91 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
     }
 
     try {
-      // 压缩任务走两遍编码：先 pass1 分析遍，成功后再跑 pass2 编码遍
-      //（buildCommand 对 video_compress 自动路由到 pass2 命令）
       if (task.presetId == FfmpegEngine.compressPresetId) {
-        final pass1Ok =
-            await _execute(task, FfmpegEngine.buildCompressCommand(task, pass: 1));
-        if (!pass1Ok) return;
+        await _runCompress(task);
+      } else {
+        final ok = await _execute(task, FfmpegEngine.buildCommand(task));
+        if (ok == _ExecResult.success) await _saveToTarget(task);
       }
-      final ok = await _execute(task, FfmpegEngine.buildCommand(task));
-      if (ok) await _saveToTarget(task);
     } catch (e) {
       _finish(task, message: '启动 FFmpeg 失败：$e');
     }
   }
 
+  /// 压缩任务执行：默认 MediaCodec 硬编单遍（快 5~10×，体积精度略降）；
+  /// 编码器不可用或硬编失败时自动回退软编两遍（精确命中目标体积）。
+  Future<void> _runCompress(ConvertTask task) async {
+    if (await FfmpegEngine.hwEncoderAvailable()) {
+      final r = await _execute(
+        task,
+        FfmpegEngine.buildHardwareCompressCommand(task),
+        finishOnFail: false, // 失败先不收尾，留给回退逻辑
+      );
+      if (r == _ExecResult.success) {
+        await _saveToTarget(task);
+        return;
+      }
+      if (r == _ExecResult.canceled) {
+        _finish(task, canceled: true);
+        return;
+      }
+      // 硬编失败 → 置回 running，用软编两遍重跑（失败原因记进 error 供排查）
+      _patch(task.id, (x) => x.copyWith(
+            status: TaskStatus.running,
+            progress: 0,
+            error: '硬编失败，已自动回退软编：${_lastFailMessage ?? '未知原因'}',
+          ));
+      if (_notifyEnabled) await _notify(task, 0);
+    }
+    final pass1 = await _execute(
+        task, FfmpegEngine.buildCompressCommand(task, pass: 1));
+    if (pass1 != _ExecResult.success) return; // 失败/取消已在 _execute 收尾
+    final ok = await _execute(task, FfmpegEngine.buildCommand(task));
+    if (ok == _ExecResult.success) await _saveToTarget(task);
+  }
+
   /// 执行一条 FFmpeg 命令并等它结束。
-  /// 返回 true = 成功（任务仍是 running，由调用方决定下一步）；
-  /// 返回 false = 已按失败/取消收尾，调用方直接返回。
-  Future<bool> _execute(ConvertTask task, String command) async {
-    final done = Completer<void>();
+  ///
+  /// 默认 [finishOnFail] 为真：失败/取消当场 [_finish] 收尾（推进队列），
+  /// 返回值只用于让调用方停止后续步骤。
+  /// [finishOnFail] 为假（硬编试跑）：失败/取消不收尾、不推进队列，
+  /// 失败原因暂存 [_lastFailMessage]，由调用方决定回退或收尾。
+  Future<_ExecResult> _execute(
+    ConvertTask task,
+    String command, {
+    bool finishOnFail = true,
+  }) async {
+    final done = Completer<_ExecResult>();
+    var result = _ExecResult.failed;
     try {
       final session = await FFmpegKit.executeAsync(
         command,
-        // 完成回调：失败/取消在这里收尾；成功交给调用方继续
+        // 完成回调：按返回码分流；成功交给调用方继续
         (s) async {
           try {
             final rc = await s.getReturnCode();
-            if (ReturnCode.isCancel(rc)) {
-              _finish(task, canceled: true);
-            } else if (!ReturnCode.isSuccess(rc)) {
+            if (ReturnCode.isSuccess(rc)) {
+              result = _ExecResult.success;
+            } else if (ReturnCode.isCancel(rc)) {
+              result = _ExecResult.canceled;
+              if (finishOnFail) _finish(task, canceled: true);
+            } else {
               final stack = await s.getFailStackTrace();
               final logs = await _tail(s);
-              _finish(
-                task,
-                message: stack ?? logs ?? 'FFmpeg 执行失败（返回码 $rc）',
-              );
+              var message =
+                  stack ?? logs ?? 'FFmpeg 执行失败（返回码 $rc）';
+              // 全量日志落盘，失败卡片可查看完整输出（大文件被系统杀进程
+              // 时尾巴日志往往抓不到关键行）
+              final logPath = await _dumpLogs(task, s);
+              if (logPath != null) message = '$message\n完整日志：$logPath';
+              if (finishOnFail) {
+                _finish(task, message: message);
+              } else {
+                _lastFailMessage = message;
+              }
             }
           } finally {
-            if (!done.isCompleted) done.complete();
+            if (!done.isCompleted) done.complete(result);
           }
         },
         // 日志回调：这里只收集，不处理（出错时用 getAllLogsAsString 取尾巴）
@@ -234,11 +287,24 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       _sessions[task.id] = session;
     } catch (e) {
       _finish(task, message: '启动 FFmpeg 失败：$e');
-      return false;
+      return _ExecResult.failed;
     }
-    await done.future;
-    final t = state.where((x) => x.id == task.id).firstOrNull;
-    return t != null && t.status == TaskStatus.running;
+    final r = await done.future;
+    _sessions.remove(task.id);
+    return r;
+  }
+
+  /// 把 FFmpeg 全量日志写到输出文件旁的 .log（失败排查用）。
+  Future<String?> _dumpLogs(ConvertTask task, FFmpegSession s) async {
+    try {
+      final logs = await s.getAllLogsAsString();
+      if (logs == null || logs.trim().isEmpty) return null;
+      final path = '${task.outputPath}.log';
+      File(path).writeAsStringSync(logs, flush: true);
+      return path;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 执行"脱壳"任务：调用原生解锁通道得到原始音频，再走统一的"输出到目标"流程。
@@ -372,6 +438,9 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
     // 失败/取消时清掉可能留下的半截输出文件
     if (!succeeded) {
       _deleteOutput(task.outputPath);
+    } else {
+      // 成功时清掉早前失败留下的日志文件
+      _deleteOutput('${task.outputPath}.log');
     }
     // 压缩任务无论成败都清掉两遍编码的 passlog 统计文件
     if (task.presetId == FfmpegEngine.compressPresetId) {

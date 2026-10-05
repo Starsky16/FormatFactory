@@ -132,6 +132,7 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
     ];
     if (add.isEmpty) return;
     setState(() => _files.addAll(add));
+    _hintBigFiles(add);
     // 默认目标体积：第一个文件体积的 40%（多选时按"每文件"统一值）
     if (_targetCtrl.text.trim().isEmpty) {
       final suggest = defaultTargetMB(_files.first.sizeBytes);
@@ -145,6 +146,19 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
         m.probing = false;
       });
     }
+  }
+
+  /// 大文件提示：系统选择器（SAF）会先把文件复制进应用缓存再给路径，
+  /// 4GB 级视频要等数秒到数十秒；设备浏览模式直接读原路径，零复制。
+  void _hintBigFiles(List<PickedMedia> fresh) {
+    const bigThreshold = 1024 * 1024 * 1024;
+    if (!fresh.any((f) => f.sizeBytes > bigThreshold)) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('检测到大文件：系统文件选择器会先把文件复制到应用缓存，'
+          '首次选取可能较慢。建议到「设置 → 文件选择方式」切换为设备浏览，'
+          '直接读取原文件，无需复制。'),
+      duration: Duration(seconds: 5),
+    ));
   }
 
   static int _safeFileSize(File f) {
@@ -250,8 +264,9 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '按目标体积精确压缩（两遍编码），输出 MP4（H.264 + AAC），'
-            '压完可直接发微信。',
+            '按目标体积压缩，输出 MP4（H.264 + AAC），压完可直接发微信。'
+            '默认硬件加速编码（快 5~10 倍，体积略有偏差），不支持或失败时'
+            '自动回退两遍软编精确命中目标体积。',
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),

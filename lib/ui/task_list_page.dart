@@ -240,12 +240,23 @@ class _TaskTile extends StatelessWidget {
       ).read(taskQueueProvider.notifier);
 
   void _showError(BuildContext context) {
+    // 失败时 FFmpeg 全量日志已落盘（输出文件旁的 .log），一并展示便于排查
+    var detail = task.error ?? '未知错误';
+    final log = File('${task.outputPath}.log');
+    if (log.existsSync()) {
+      var content = log.readAsStringSync();
+      // 日志可能非常大，弹窗里只放末尾 4000 字符
+      if (content.length > 4000) {
+        content = content.substring(content.length - 4000);
+      }
+      detail = '$detail\n\n―― FFmpeg 日志末尾（完整日志见 ${log.path}）――\n$content';
+    }
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('失败原因'),
         content: SingleChildScrollView(
-          child: Text(task.error ?? '未知错误',
+          child: SelectableText(detail,
               style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
         ),
         actions: [

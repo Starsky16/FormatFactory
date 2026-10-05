@@ -184,6 +184,52 @@ void main() {
     });
   });
 
+  // ---------- 硬件加速压缩命令（MediaCodec 单遍） ----------
+
+  group('硬编命令 buildHardwareCompressCommand', () {
+    Map<SettingKey, String> values({String targetMB = '50'}) =>
+        {SettingKey.targetVolumeMB: targetMB};
+
+    test('MediaCodec 单遍：无 -pass/-passlogfile/-preset，保留码率三件套', () {
+      final cmd = FfmpegEngine.buildHardwareCompressCommand(task(
+        presetId: FfmpegEngine.compressPresetId,
+        duration: 300,
+        values: values(),
+      ));
+      expect(cmd, contains('-c:v h264_mediacodec'));
+      expect(cmd, contains('-b:v 1242k'));
+      expect(cmd, contains('-maxrate 1863k'));
+      expect(cmd, contains('-bufsize 1863k'));
+      // MediaCodec 不支持两遍编码与 -preset
+      expect(cmd, isNot(contains('-pass')));
+      expect(cmd, isNot(contains('-passlogfile')));
+      expect(cmd, isNot(contains('-preset')));
+      expect(cmd, contains('-pix_fmt nv12')); // MediaCodec 偏好的输入格式
+      expect(cmd, contains('-c:a aac'));
+      expect(cmd, contains('-b:a 128k'));
+      expect(cmd, contains('-movflags +faststart'));
+      expect(cmd, endsWith('"/out/a.mp4"'));
+    });
+
+    test('裁剪与分辨率/帧率上限照常注入', () {
+      final cmd = FfmpegEngine.buildHardwareCompressCommand(task(
+        presetId: FfmpegEngine.compressPresetId,
+        duration: 300,
+        values: {
+          ...values(),
+          SettingKey.trimStart: '10',
+          SettingKey.trimEnd: '70',
+          SettingKey.resolutionCap: '720p',
+          SettingKey.fpsCap: '30',
+        },
+      ));
+      expect(cmd, contains('-ss 10'));
+      expect(cmd, contains('-t 60'));
+      expect(cmd, contains('scale=-2:min(ih,720)'));
+      expect(cmd, contains('-r 30'));
+    });
+  });
+
   // ---------- buildCommand 路由 ----------
 
   test('buildCommand 对压缩任务自动路由到 pass2 命令', () {
