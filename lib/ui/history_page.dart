@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models.dart';
+import '../services/compress_calc.dart';
 import '../services/file_store.dart';
+import '../services/ffmpeg_engine.dart';
 import '../state/app_settings.dart';
 import '../state/history_notifier.dart';
 import '../state/task_queue.dart';
@@ -107,6 +109,14 @@ class _HistoryTile extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            if (_effectLine.isNotEmpty)
+              Text(
+                _effectLine,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
             Text(
               '${status.label} · ${_shortTime(entry.finishedAt)}',
               style: theme.textTheme.bodySmall
@@ -124,6 +134,18 @@ class _HistoryTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// 压缩任务且成功时显示体积对比；其余情况为空（不显示）。
+  String get _effectLine {
+    if (entry.status != TaskStatus.succeeded ||
+        entry.presetId != FfmpegEngine.compressPresetId ||
+        entry.inputBytes == null) {
+      return '';
+    }
+    final f = File(entry.outputPath);
+    final outBytes = f.existsSync() ? f.lengthSync() : 0;
+    return compressEffectText(entry.inputBytes!, outBytes);
   }
 
   Future<void> _onAction(

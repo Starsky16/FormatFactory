@@ -5,6 +5,7 @@ import '../models.dart';
 import '../state/history_notifier.dart';
 import '../state/task_queue.dart';
 import 'bili_page.dart';
+import 'compression_page.dart';
 import 'convert_flow.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
@@ -58,6 +59,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     );
   }
 
+  /// 视频压缩：按目标体积两遍编码。
+  Future<void> _openCompress() async {
+    final added = await Navigator.of(context).push<int>(
+      MaterialPageRoute(builder: (_) => const CompressionPage()),
+    );
+    if (added == null || added <= 0 || !mounted) return;
+    setState(() => _index = 1);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已把 $added 个压缩任务加入队列')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pending = ref
@@ -100,6 +113,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             onConvert: _openConvert,
             onOpenUnlock: _openUnlock,
             onOpenBili: _openBili,
+            onOpenCompress: _openCompress,
           ),
           const TasksPage(),
           const HistoryPage(),
@@ -150,11 +164,13 @@ class _HomeView extends StatelessWidget {
     required this.onConvert,
     required this.onOpenUnlock,
     required this.onOpenBili,
+    required this.onOpenCompress,
   });
 
   final void Function(MediaKind kind) onConvert;
   final VoidCallback onOpenUnlock;
   final VoidCallback onOpenBili;
+  final VoidCallback onOpenCompress;
 
   static const _colors = <Color>[
     Color(0xFF3F51B5), // 视频 靛蓝
@@ -234,6 +250,24 @@ class _HomeView extends StatelessWidget {
             subtitle: const Text('网易云 .ncm、QQ .qmc/.mflac/.mgg、酷狗 .kgm/.kgma/.vpr 加密音乐还原为原始格式（不转码）'),
             trailing: const Icon(Icons.chevron_right),
             onTap: onOpenUnlock,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: const CircleAvatar(
+              radius: 22,
+              backgroundColor: Color(0x33008885),
+              child: Icon(Icons.compress_outlined, color: Color(0xFF00807D)),
+            ),
+            title: const Text('视频压缩',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('按目标体积精确压缩（两遍编码），输出 MP4；'
+                '可选裁剪与按每段分钟数分段'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onOpenCompress,
           ),
         ),
         const SizedBox(height: 12),

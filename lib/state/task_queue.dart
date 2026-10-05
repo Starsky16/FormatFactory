@@ -7,6 +7,7 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../services/compress_calc.dart';
 import '../services/ffmpeg_engine.dart';
 import '../services/foreground_notifier.dart';
 import '../services/history_store.dart';
@@ -24,6 +25,80 @@ import 'history_notifier.dart';
 ///   4. 支持取消任务 / 清空队列 / 失败重试
 final taskQueueProvider =
     NotifierProvider<TaskQueue, List<ConvertTask>>(TaskQueue.new);
+
+/// 按分段设置把 [base] 展开成多个任务（入队前调用）。
+///
+/// 填了 segmentMinutes（每段分钟数）时按 [segmentBounds] 切段：
+///   - 每段生成一个任务，各自覆写 trimStart/trimEnd，输出名加 `_partN`
+///   - 压缩任务（video_compress）把目标体积按段均分（余数给前几段）
+/// 未填分段、段秒非法、无源时长或只切出 1 段时，原样返回 [base]。
+List<ConvertTask> expandSegments(ConvertTask base) {
+  final minutes =
+      double.tryParse(base.settings.of(SettingKey.segmentMinutes).trim());
+  if (minutes == null || minutes <= 0) return [base];
+  final segs = segmentBounds(
+    durationSeconds: base.inputDurationSeconds ?? 0,
+    segmentSeconds: minutes * 60,
+    trimStart: base.settings.of(SettingKey.trimStart),
+    trimEnd: base.settings.of(SettingKey.trimEnd),
+  );
+  if (segs.length <= 1) return [base];
+
+  final isCompress = base.presetId == FfmpegEngine.compressPresetId;
+  final targetMB =
+      int.tryParse(base.settings.of(SettingKey.targetVolumeMB).trim());
+  final n = segs.length;
+
+  return [
+    for (var i = 0; i < n; i++)
+      _segmentTask(base, segs[i],
+          part: i + 1, perVolumeMB: isCompress && targetMB != null && targetMB > 0
+              ? (targetMB ~/ n + (i < targetMB % n ? 1 : 0)).clamp(1, targetMB)
+              : null),
+  ];
+}
+
+/// 生成一个分段任务：覆写裁剪边界与（可选）每段目标体积。
+ConvertTask _segmentTask(
+  ConvertTask base,
+  SegmentRange seg, {
+  required int part,
+  int? perVolumeMB,
+}) {
+  final values = Map.of(base.settings.values)
+    ..[SettingKey.trimStart] = formatClock(seg.start)
+    ..[SettingKey.trimEnd] = formatClock(seg.end);
+  if (perVolumeMB != null) {
+    values[SettingKey.targetVolumeMB] = '$perVolumeMB';
+  }
+  return ConvertTask(
+    // id 必须唯一：_patch/取消/历史都按 id 找任务
+    id: '${base.id}_p$part',
+    kind: base.kind,
+    inputPath: base.inputPath,
+    inputName: base.inputName,
+    presetId: base.presetId,
+    presetName: base.presetName,
+    settings: ConvertSettings(values),
+    outputPath: _partPath(base.outputPath, part),
+    createdAt: base.createdAt,
+    unlockFormat: base.unlockFormat,
+    mergeAudioPath: base.mergeAudioPath,
+    safTreeUri: base.safTreeUri,
+    mediaStoreDir: base.mediaStoreDir,
+    inputDurationSeconds: base.inputDurationSeconds,
+    inputBytes: base.inputBytes,
+    inputHasAttachedPic: base.inputHasAttachedPic,
+  );
+}
+
+/// '/out/a.mp4' + 2 -> '/out/a_part2.mp4'（无扩展名时追加在尾部）。
+String _partPath(String path, int part) {
+  final dot = path.lastIndexOf('.');
+  final slash = path.lastIndexOf('/');
+  if (dot < 0 || dot < slash) return '${path}_part$part';
+  return '${path.substring(0, dot)}_part$part${path.substring(dot)}';
+}
 
 class TaskQueue extends Notifier<List<ConvertTask>> {
   /// 正在运行的任务数（不应超过并行上限）。
@@ -97,25 +172,45 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       return;
     }
 
-    final command = FfmpegEngine.buildCommand(task);
+    try {
+      // 压缩任务走两遍编码：先 pass1 分析遍，成功后再跑 pass2 编码遍
+      //（buildCommand 对 video_compress 自动路由到 pass2 命令）
+      if (task.presetId == FfmpegEngine.compressPresetId) {
+        final pass1Ok =
+            await _execute(task, FfmpegEngine.buildCompressCommand(task, pass: 1));
+        if (!pass1Ok) return;
+      }
+      final ok = await _execute(task, FfmpegEngine.buildCommand(task));
+      if (ok) await _saveToTarget(task);
+    } catch (e) {
+      _finish(task, message: '启动 FFmpeg 失败：$e');
+    }
+  }
+
+  /// 执行一条 FFmpeg 命令并等它结束。
+  /// 返回 true = 成功（任务仍是 running，由调用方决定下一步）；
+  /// 返回 false = 已按失败/取消收尾，调用方直接返回。
+  Future<bool> _execute(ConvertTask task, String command) async {
+    final done = Completer<void>();
     try {
       final session = await FFmpegKit.executeAsync(
         command,
-        // 完成回调：根据返回码判定成功/失败/被取消
+        // 完成回调：失败/取消在这里收尾；成功交给调用方继续
         (s) async {
-          final rc = await s.getReturnCode();
-          if (ReturnCode.isSuccess(rc)) {
-            await _saveToTarget(task);
-          } else if (ReturnCode.isCancel(rc)) {
-            _finish(task, canceled: true);
-          } else {
-            // 返回码非 0：可能是编码错误或异常
-            final stack = await s.getFailStackTrace();
-            final logs = await _tail(s);
-            _finish(
-              task,
-              message: stack ?? logs ?? 'FFmpeg 执行失败（返回码 $rc）',
-            );
+          try {
+            final rc = await s.getReturnCode();
+            if (ReturnCode.isCancel(rc)) {
+              _finish(task, canceled: true);
+            } else if (!ReturnCode.isSuccess(rc)) {
+              final stack = await s.getFailStackTrace();
+              final logs = await _tail(s);
+              _finish(
+                task,
+                message: stack ?? logs ?? 'FFmpeg 执行失败（返回码 $rc）',
+              );
+            }
+          } finally {
+            if (!done.isCompleted) done.complete();
           }
         },
         // 日志回调：这里只收集，不处理（出错时用 getAllLogsAsString 取尾巴）
@@ -139,7 +234,11 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       _sessions[task.id] = session;
     } catch (e) {
       _finish(task, message: '启动 FFmpeg 失败：$e');
+      return false;
     }
+    await done.future;
+    final t = state.where((x) => x.id == task.id).firstOrNull;
+    return t != null && t.status == TaskStatus.running;
   }
 
   /// 执行"脱壳"任务：调用原生解锁通道得到原始音频，再走统一的"输出到目标"流程。
@@ -273,6 +372,10 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
     // 失败/取消时清掉可能留下的半截输出文件
     if (!succeeded) {
       _deleteOutput(task.outputPath);
+    }
+    // 压缩任务无论成败都清掉两遍编码的 passlog 统计文件
+    if (task.presetId == FfmpegEngine.compressPresetId) {
+      _deleteOutput(FfmpegEngine.passlogPath(task));
     }
     _pump();
     // 队列已空：停止前台服务/通知

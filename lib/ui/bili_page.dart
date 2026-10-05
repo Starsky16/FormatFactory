@@ -11,7 +11,6 @@ import '../services/manage_permission.dart';
 import '../state/app_settings.dart';
 import '../state/task_queue.dart';
 import 'file_browser_page.dart';
-import 'picked_media.dart';
 
 /// B站缓存转视频：选缓存目录 → 解析出「视频流 + 音频流」→ 合并成普通 MP4 入队。
 ///

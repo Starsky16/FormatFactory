@@ -33,6 +33,14 @@ enum SettingKey {
   sampleRate, // 采样率
   channels, // 声道数
   imageQuality, // 图片质量 1~100
+
+  // ---- 裁剪 / 分段 / 压缩（视频预设公共区 + 压缩专用） ----
+  trimStart, // 裁剪开始时间（"1:23:45"/"12:34"/纯秒，留空=不裁）
+  trimEnd, // 裁剪结束时间（同上格式，留空=到结尾）
+  segmentMinutes, // 分段：每段时长（分钟，留空=不分段）
+  targetVolumeMB, // 压缩：目标体积（MB，必填）
+  resolutionCap, // 压缩：分辨率上限（原尺寸/720p/480p…，留空=原尺寸）
+  fpsCap, // 压缩：帧率上限（留空=不限）
 }
 
 /// 一次转换的全部用户设置：key -> 选中的选项文本。
@@ -90,6 +98,7 @@ class ConvertTask {
     this.safTreeUri,
     this.mediaStoreDir,
     this.inputDurationSeconds,
+    this.inputBytes,
     this.inputHasAttachedPic = false,
     this.status = TaskStatus.queued,
     this.progress = 0,
@@ -115,6 +124,10 @@ class ConvertTask {
 
   /// 源时长（秒），FFprobe 读出来用于换算进度百分比。
   final double? inputDurationSeconds;
+
+  /// 源文件体积（字节）。压缩任务用它展示"压前 → 压后"体积对比；
+  /// null = 未知（读取失败或旧任务）。
+  final int? inputBytes;
 
   /// 源文件的第一个视频流是否是内嵌封面（attached_pic）。
   /// 音频输出映射封面时用：为真时去掉 -vn 并把封面流复制进产物。
@@ -146,6 +159,7 @@ class ConvertTask {
     bool clearError = false,
     String? outputPath,
     String? mergeAudioPath,
+    int? inputBytes,
   }) {
     return ConvertTask(
       id: id,
@@ -162,6 +176,7 @@ class ConvertTask {
       safTreeUri: safTreeUri,
       mediaStoreDir: mediaStoreDir,
       inputDurationSeconds: inputDurationSeconds,
+      inputBytes: inputBytes ?? this.inputBytes,
       inputHasAttachedPic: inputHasAttachedPic,
       status: status ?? this.status,
       progress: progress ?? this.progress,
@@ -225,5 +240,19 @@ String formatClock(double seconds) {
   final ss = s.toString().padLeft(2, '0');
   if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
   return '$m:$ss';
+}
+
+/// 文件大小 -> "2.3 MB"。
+String formatBytes(int bytes) {
+  if (bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  var v = bytes.toDouble();
+  var i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  final text = v >= 100 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+  return '$text ${units[i]}';
 }
 

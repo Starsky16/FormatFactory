@@ -19,17 +19,3 @@ class PickedMedia {
   /// 是否还在读信息（界面显示占位文案）。
   bool probing = true;
 }
-
-/// 文件大小 -> "2.3 MB"。
-String formatBytes(int bytes) {
-  if (bytes <= 0) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  var v = bytes.toDouble();
-  var i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  final text = v >= 100 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-  return '$text ${units[i]}';
-}

@@ -16,7 +16,7 @@ class HistoryStore {
     if (_db != null) return _db!;
     final db = await openDatabase(
       p.join(await getDatabasesPath(), 'history.db'),
-      version: 1,
+      version: 2,
       onCreate: (db, _) => db.execute('''
         CREATE TABLE history(
           id TEXT PRIMARY KEY,
@@ -30,9 +30,13 @@ class HistoryStore {
           status INTEGER NOT NULL,
           progress REAL,
           created_at INTEGER,
-          finished_at INTEGER
+          finished_at INTEGER,
+          input_bytes INTEGER
         )
       '''),
+      // v2：新增 input_bytes（源文件体积，压缩任务展示前后体积对比用）
+      onUpgrade: (db, _, _) async =>
+          db.execute('ALTER TABLE history ADD COLUMN input_bytes INTEGER'),
     );
     _db = db;
     return db;
@@ -59,6 +63,7 @@ class HistoryStore {
         'progress': task.progress,
         'created_at': task.createdAt.millisecondsSinceEpoch,
         'finished_at': DateTime.now().millisecondsSinceEpoch,
+        'input_bytes': task.inputBytes,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

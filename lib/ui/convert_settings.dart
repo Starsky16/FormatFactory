@@ -10,6 +10,13 @@ import '../state/app_settings.dart';
 import '../state/task_queue.dart';
 import 'picked_media.dart';
 
+/// 视频预设公共区（裁剪/分段）的 SettingKey，跨预设保留用户输入。
+const List<SettingKey> kVideoCommonKeys = [
+  SettingKey.trimStart,
+  SettingKey.trimEnd,
+  SettingKey.segmentMinutes,
+];
+
 /// 转换流程第二步：选择"输出格式 + 参数"，点按钮后把所有文件加入任务队列。
 /// 返回给上一页的是成功入队的任务数量。
 class ConvertSettingsPage extends ConsumerStatefulWidget {
@@ -40,8 +47,16 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
   }
 
   /// 每个参数取各自的初始值（下拉框取第一项，数字框取默认或留空）。
-  void _resetDefaults() {
+  /// 视频的裁剪/分段是跨预设公共参数，[keepCommon] 为真时保留已填内容。
+  void _resetDefaults({bool keepCommon = false}) {
+    final common = keepCommon
+        ? {
+            for (final k in kVideoCommonKeys)
+              if (_values[k]?.trim().isNotEmpty == true) k: _values[k]!,
+          }
+        : <SettingKey, String>{};
     _values = {
+      ...common,
       for (final f in _preset.fields) f.key: f.initialValue,
     };
   }
@@ -50,7 +65,7 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
     if (p.id == _preset.id) return;
     setState(() {
       _preset = p;
-      _resetDefaults();
+      _resetDefaults(keepCommon: true);
     });
   }
 
@@ -83,7 +98,7 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
       final plan = await FileStore.plan(widget.kind, f.name, outExt,
           target: target, claimed: claimed);
       warning ??= plan.warning;
-      tasks.add(ConvertTask(
+      final base = ConvertTask(
         id: TaskQueue.newId(),
         kind: widget.kind,
         inputPath: f.path,
@@ -96,8 +111,11 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
         safTreeUri: plan.safTreeUri,
         mediaStoreDir: plan.mediaStoreDir,
         inputDurationSeconds: f.info?.durationSeconds,
+        inputBytes: f.sizeBytes,
         inputHasAttachedPic: f.info?.hasAttachedPic ?? false,
-      ));
+      );
+      // 填了分段（segmentMinutes）：入队即展开成 N 个带各自裁剪边界的任务
+      tasks.addAll(expandSegments(base));
     }
     if (!mounted) return;
     if (warning != null) {
@@ -128,6 +146,11 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
             const SizedBox(height: 16),
             _sectionTitle('参数'),
             ..._preset.fields.map(_fieldEditor),
+          ],
+          if (widget.kind == MediaKind.video) ...[
+            const SizedBox(height: 16),
+            _sectionTitle('裁剪 / 分段（可选）'),
+            _videoCommonEditors(),
           ],
           const SizedBox(height: 16),
           _sectionTitle('待转换文件（${widget.files.length} 个）'),
@@ -232,6 +255,76 @@ class _ConvertSettingsPageState extends ConsumerState<ConvertSettingsPage> {
                       ?.copyWith(color: Theme.of(context).colorScheme.outline),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 视频预设公共区：裁剪起止 + 分段分钟。
+  /// 裁剪 = `-ss` 输入级 seek；"仅换容器"不重编码，按关键帧粗切（起点可能略偏）。
+  Widget _videoCommonEditors() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              key: const ValueKey('common-trimStart'),
+              initialValue: _values[SettingKey.trimStart] ?? '',
+              keyboardType: TextInputType.datetime,
+              decoration: const InputDecoration(
+                labelText: '裁剪开始时间',
+                hintText: '如 1:23:45 / 12:34 / 90，留空 = 从头',
+                border: UnderlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _values = {
+                    ..._values,
+                    SettingKey.trimStart: v.trim(),
+                  }),
+            ),
+            TextFormField(
+              key: const ValueKey('common-trimEnd'),
+              initialValue: _values[SettingKey.trimEnd] ?? '',
+              keyboardType: TextInputType.datetime,
+              decoration: const InputDecoration(
+                labelText: '裁剪结束时间',
+                hintText: '留空 = 到结尾',
+                border: UnderlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _values = {
+                    ..._values,
+                    SettingKey.trimEnd: v.trim(),
+                  }),
+            ),
+            TextFormField(
+              key: const ValueKey('common-segment'),
+              initialValue: _values[SettingKey.segmentMinutes] ?? '',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: '分段：每段时长（分钟）',
+                hintText: '留空 = 不分段',
+                border: UnderlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _values = {
+                    ..._values,
+                    SettingKey.segmentMinutes: v.trim(),
+                  }),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '分段会拆成多个任务（输出名带 _part 序号）。'
+                '"仅换容器"不重新编码，裁剪/分段按关键帧粗切、起点可能略偏；'
+                '其余格式为精确切割。',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
+              ),
+            ),
           ],
         ),
       ),

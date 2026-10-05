@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models.dart';
+import '../services/compress_calc.dart';
+import '../services/ffmpeg_engine.dart';
 import '../state/task_queue.dart';
 
 /// 任务列表页：显示全部任务、实时进度，支持取消/重试/分享。
@@ -136,7 +138,7 @@ class _TaskTile extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      _outputLine,
+                      _effectLine,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall
@@ -195,7 +197,23 @@ class _TaskTile extends StatelessWidget {
     );
   }
 
-  /// 成功后"文件在哪"的一行说明：
+  /// 成功后的一行说明：
+  ///  - 压缩任务：显示"压前 → 压后（−xx%）"体积对比，外加所在位置
+  ///  - 其他任务：显示"文件在哪"
+  ///  - SAF / 系统下载目录：提示已搬运，并说明内部仍留一份可分享的副本
+  String get _effectLine {
+    final out = File(task.outputPath);
+    final outBytes = out.existsSync() ? out.lengthSync() : 0;
+    final where = _outputLine;
+    if (task.presetId == FfmpegEngine.compressPresetId &&
+        task.inputBytes != null) {
+      final effect = compressEffectText(task.inputBytes!, outBytes);
+      return effect.isEmpty ? where : '$effect · $where';
+    }
+    return where;
+  }
+
+  /// "文件在哪"的一行说明：
   ///  - 直接写最终目录（默认目录 / 应用专属目录）：显示真实路径
   ///  - SAF / 系统下载目录：提示已搬运，并说明内部仍留一份可分享的副本
   String get _outputLine {
