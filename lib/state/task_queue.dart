@@ -192,8 +192,12 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
 
   /// 压缩任务执行：默认 MediaCodec 硬编单遍（快 5~10×，体积精度略降）；
   /// 编码器不可用或硬编失败时自动回退软编两遍（精确命中目标体积）。
+  ///
+  /// 实际用的编码器写进任务参数摘要（videoEncoder），用户在任务列表
+  /// 可直接看到"硬件/软件"——硬编静默不可用时不再无迹可寻。
   Future<void> _runCompress(ConvertTask task) async {
     if (await FfmpegEngine.hwEncoderAvailable()) {
+      _markEncoder(task, 'h264_mediacodec（硬件）');
       final r = await _execute(
         task,
         FfmpegEngine.buildHardwareCompressCommand(task),
@@ -213,7 +217,10 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
             progress: 0,
             error: '硬编失败，已自动回退软编：${_lastFailMessage ?? '未知原因'}',
           ));
+      _markEncoder(task, 'libx264（软件，硬编失败回退）');
       if (_notifyEnabled) await _notify(task, 0);
+    } else {
+      _markEncoder(task, 'libx264（软件，设备未探测到硬编）');
     }
     final pass1 = await _execute(
         task, FfmpegEngine.buildCompressCommand(task, pass: 1));
@@ -292,6 +299,16 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
     final r = await done.future;
     _sessions.remove(task.id);
     return r;
+  }
+
+  /// 把实际使用的视频编码器写进任务参数摘要（summary 会显示）。
+  void _markEncoder(ConvertTask task, String label) {
+    _patch(task.id, (x) => x.copyWith(
+          settings: ConvertSettings(<SettingKey, String>{
+            ...x.settings.values,
+            SettingKey.videoEncoder: label,
+          }),
+        ));
   }
 
   /// 把 FFmpeg 全量日志写到输出文件旁的 .log（失败排查用）。

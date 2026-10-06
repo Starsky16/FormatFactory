@@ -159,6 +159,7 @@ class ConvertTask {
     bool clearError = false,
     String? outputPath,
     String? mergeAudioPath,
+    ConvertSettings? settings,
     int? inputBytes,
   }) {
     return ConvertTask(
@@ -168,7 +169,7 @@ class ConvertTask {
       inputName: inputName,
       presetId: presetId,
       presetName: presetName,
-      settings: settings,
+      settings: settings ?? this.settings,
       outputPath: outputPath ?? this.outputPath,
       createdAt: createdAt,
       unlockFormat: unlockFormat,
