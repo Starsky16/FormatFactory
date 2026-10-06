@@ -27,6 +27,18 @@ class StorageAccess {
   /// 是否 Android 11+（API 30+）。
   static bool get isAndroid11Plus => sdkInt >= 30;
 
+  /// 权限诊断：一次性导出整条判定链路（原生 checkSelfPermission / AppOps /
+  /// 文件系统实测），行列表；失败时返回带失败原因的行（诊断本身不该静默）。
+  /// ⚠️ 通道解码回来是 `List<Object?>`，必须 `cast()`，直接 as `List<String?>` 会炸。
+  static Future<List<String>?> diagnose() async {
+    try {
+      final raw = await _channel.invokeMethod<List>('diagnose');
+      return raw?.cast<String>();
+    } catch (e) {
+      return ['diagnose通道异常: $e'];
+    }
+  }
+
   /// 弹出系统目录选择器；用户取消返回 null。
   static Future<String?> pickDirectory() async {
     return _channel.invokeMethod<String>('pickOutputDir');
@@ -77,6 +89,33 @@ class StorageAccess {
         'fileName': fileName,
         'srcPath': srcPath,
       });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// B站缓存 SAF 副本导入：把用户选择的 [treeUri] 目录整树复制到本地
+  /// [destDir]（镜像），返回 `files` / `bytes` / `mirrorDir`。
+  ///
+  /// 背景：Android 13+ 系统严格封锁其他应用的 Android/data（"所有文件访问"
+  /// 也读不了、SAF 也进不去），B站缓存直读失效——用户用系统文件管理器把
+  /// 缓存目录复制到普通位置后，这里镜像进工作区，Dart 侧用现成的
+  /// BiliCache.scan 扫描镜像即可（扫描逻辑零改动）。重新导入会先清旧镜像。
+  static Future<({int files, int bytes, String mirrorDir})?> importTree({
+    required String treeUri,
+    required String destDir,
+  }) async {
+    try {
+      final r = await _channel.invokeMapMethod<String, Object?>('importTree', {
+        'treeUri': treeUri,
+        'destDir': destDir,
+      });
+      if (r == null) return null;
+      return (
+        files: (r['files'] as num?)?.toInt() ?? 0,
+        bytes: (r['bytes'] as num?)?.toInt() ?? 0,
+        mirrorDir: r['mirrorDir'] as String? ?? destDir,
+      );
     } catch (_) {
       return null;
     }

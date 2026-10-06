@@ -81,6 +81,68 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
             // 系统版本权威判定源（Build.VERSION.SDK_INT）。Dart 侧 Platform.version
             // 返回的是 Dart 运行时版本（"3.x…"），拿 Android 版本必须走这里。
             "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+            // 权限诊断：把整条判定链路一次性导出（返回文本行列表），
+            // 供设置页一键复制、用户回贴定位 ROM 魔改问题。
+            "diagnose" -> result.success(buildList {
+                add("sdkInt=${Build.VERSION.SDK_INT}")
+                fun perm(name: String) {
+                    val granted = checkSelfPermission(name) ==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                    add("checkSelfPermission[$name]=${if (granted) "GRANTED" else "DENIED"}")
+                }
+                perm(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                perm(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    add("isExternalStorageManager=${Environment.isExternalStorageManager()}")
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    add("isExternalStorageLegacy=${Environment.isExternalStorageLegacy()}")
+                }
+                // AppOps 层（华为系 ROM 有在此造假/漏登记的历史）。
+                // ⚠️ 必须接 Throwable：checkOpNoThrow(String,…) 是 API 29+ 重载，
+                // Android 9 上调用抛 NoSuchMethodError（Error 不是 Exception），
+                // 若只接 Exception 会把整个诊断带崩（实测教训）。
+                val appOps = getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager
+                val uid = android.os.Process.myUid()
+                val packageName = packageName
+                fun op(modeOf: (android.app.AppOpsManager) -> Any?, label: String) {
+                    try {
+                        add("$label=${modeOf(appOps)}")
+                    } catch (e: Throwable) {
+                        add("$label=异常:${e.javaClass.simpleName}:${e.message}")
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    op({ it.checkOpNoThrow(
+                        android.app.AppOpsManager.OPSTR_READ_EXTERNAL_STORAGE, uid, packageName
+                    ) }, "appops.read")
+                } else {
+                    // Android 9：字符串版不存在，走 int 版（公开 API，反射调用）
+                    op({
+                        val m = appOps.javaClass.getMethod(
+                            "checkOpNoThrow",
+                            Int::class.javaPrimitiveType,
+                            Int::class.javaPrimitiveType,
+                            String::class.java,
+                        )
+                        m.invoke(appOps, 43, uid, packageName) // 43 = OP_READ_EXTERNAL_STORAGE
+                    }, "appops.read(int)")
+                }
+                // 文件系统实测：根目录 / 下载目录 / 应用专属目录
+                fun probe(path: String) {
+                    val f = File(path)
+                    add("probe[$path] exists=${f.exists()} canRead=${f.canRead()}")
+                    try {
+                        val n = f.listFiles()?.size ?: -1
+                        add("  list=$n")
+                    } catch (e: Exception) {
+                        add("  list异常=${e.javaClass.simpleName}:${e.message}")
+                    }
+                }
+                probe("/storage/emulated/0/")
+                probe("/storage/emulated/0/Download")
+                probe(getExternalFilesDir(null)?.absolutePath ?: "/data/unknown")
+            })
             "pickOutputDir" -> {
                 pendingPick = result
                 openTree.launch(null)
@@ -110,6 +172,54 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                     result.success(target.uri.toString())
                 } catch (e: Exception) {
                     result.error("copy_failed", e.message, null)
+                }
+            }
+            // ===== B 站缓存 SAF 副本导入 =====
+            // Android 13+ 系统严格封锁其他应用的 Android/data（MANAGE 也读不了、
+            // SAF 也进不去），直读路径失效。fallback：用户用系统文件管理器把
+            // B 站缓存目录复制到普通位置后，从这里选副本目录 → 整树镜像到
+            // 应用工作区 → Dart 侧用现成的 BiliCache.scan 扫描镜像。
+            "importTree" -> {
+                val treeUri = call.argument<String>("treeUri")
+                val destDir = call.argument<String>("destDir")
+                if (treeUri == null || destDir == null) {
+                    result.error("bad_args", "缺少参数", null)
+                    return
+                }
+                runAsync(result, errorCode = "import_failed") {
+                    val root = DocumentFile.fromTreeUri(this, Uri.parse(treeUri))
+                        ?: throw IllegalStateException("所选目录已不可访问，请重新选择")
+                    val dest = File(destDir)
+                    // 重新导入时清掉上次镜像，避免残留旧文件混进扫描结果
+                    if (dest.exists()) dest.deleteRecursively()
+                    if (!dest.mkdirs()) throw IllegalStateException("无法创建工作目录")
+                    var files = 0
+                    var bytes = 0L
+                    fun walk(src: DocumentFile, rel: String) {
+                        val outDir = File(dest, rel)
+                        if (!outDir.exists() && !outDir.mkdirs()) {
+                            throw IllegalStateException("无法创建目录：${outDir.path}")
+                        }
+                        for (child in src.listFiles()) {
+                            val name = child.name ?: continue
+                            if (child.isDirectory) {
+                                walk(child, if (rel.isEmpty()) name else "$rel/$name")
+                            } else {
+                                val out = File(outDir, name)
+                                contentResolver.openInputStream(child.uri)?.use { ins ->
+                                    out.outputStream().use { os -> ins.copyTo(os) }
+                                } ?: throw IllegalStateException("无法读取文件：$name")
+                                files++
+                                bytes += out.length()
+                            }
+                        }
+                    }
+                    walk(root, "")
+                    mapOf(
+                        "files" to files,
+                        "bytes" to bytes,
+                        "mirrorDir" to dest.absolutePath,
+                    )
                 }
             }
             "copyToDownloads" -> {

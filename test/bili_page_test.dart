@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/app.dart';
-import 'package:format_factory/state/app_settings.dart';
+import 'package:formatfactory/app.dart';
+import 'package:formatfactory/state/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// B站缓存转视频页面：首页入口 + 空态渲染。

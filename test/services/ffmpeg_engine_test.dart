@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/services/ffmpeg_engine.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/services/ffmpeg_engine.dart';
 
 /// FFmpeg 引擎的裁剪注入与压缩命令拼装测试。
 /// 重点：-ss 必须位于 -i 之前（输入级 seek）、remux+裁剪组合、

@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/services/bili_cache.dart';
-import 'package:format_factory/services/ffmpeg_engine.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/services/bili_cache.dart';
+import 'package:formatfactory/services/ffmpeg_engine.dart';
 import 'package:path/path.dart' as p;
 
 /// B站缓存解析 + 合并命令拼装的单元测试。

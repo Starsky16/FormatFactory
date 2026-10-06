@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -521,9 +522,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: const Text('去授权'),
                 ),
               ),
+            // 权限链路诊断：一键复制整条判定结果（原生权限 / AppOps / 实测），
+            // 供用户回贴定位个别 ROM（如鸿蒙）的假授予问题
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _copyDiagnosis,
+                child: const Text('复制权限诊断信息'),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// 收集权限诊断链路并复制到剪贴板。
+  Future<void> _copyDiagnosis() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final lines = <String>[
+      'manageStatus=$_manageStatus',
+      '实测可读=${await ManagePermission.canReadSharedStorage()}',
+      ...(await StorageAccess.diagnose() ?? const ['原生诊断通道不可用']),
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    messenger.showSnackBar(const SnackBar(
+      content: Text('诊断信息已复制，请粘贴发送给开发者'),
+    ));
   }
 }

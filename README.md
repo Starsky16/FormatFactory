@@ -1,8 +1,8 @@
 # 格式工厂 · Format Factory（Android）
 
-[![CI](https://github.com/Starsky16/format_factory_Android/actions/workflows/ci.yml/badge.svg)](https://github.com/Starsky16/format_factory_Android/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/Starsky16/format_factory_Android?label=Download)](https://github.com/Starsky16/format_factory_Android/releases/latest)
-[![License](https://img.shields.io/github/license/Starsky16/format_factory_Android)](LICENSE)
+[![CI](https://github.com/Starsky16/FormatFactory/actions/workflows/ci.yml/badge.svg)](https://github.com/Starsky16/FormatFactory/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Starsky16/FormatFactory?label=Download)](https://github.com/Starsky16/FormatFactory/releases/latest)
+[![License](https://img.shields.io/github/license/Starsky16/FormatFactory)](LICENSE)
 
 一款 Android 上的"格式工厂"：把视频、音频、图片转换成你想要的格式；还能把网易云/QQ音乐/酷狗下载的**加密音乐还原成普通格式**、把 B 站客户端缓存的视频**无损合并成普通 MP4**。全部处理都在手机本地完成、**不联网也不上传**——**发布版**未申请 `INTERNET` 权限（`android/app/src/main/AndroidManifest.xml` 与本项目全部依赖的清单里均无该声明，可自行核查；`debug`/`profile` 开发构建按 Flutter 模板默认带此权限，与发布版无关）。
 
@@ -13,7 +13,7 @@
 ## 📲 下载与安装
 
 安装包发布在 **GitHub Releases**：
-👉 https://github.com/Starsky16/format_factory_Android/releases/latest
+👉 https://github.com/Starsky16/FormatFactory/releases/latest
 
 | 安装包 | 适用设备 |
 |---|---|

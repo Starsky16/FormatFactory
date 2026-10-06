@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/state/task_queue.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/state/task_queue.dart';
 
 /// 分段入队展开逻辑测试：填了 segmentMinutes 的任务在入队时
 /// 展开成 N 个带各自 trimStart/trimEnd 的任务；压缩任务每段均分目标体积。
