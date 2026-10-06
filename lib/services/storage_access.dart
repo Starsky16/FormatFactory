@@ -27,6 +27,16 @@ class StorageAccess {
   /// 是否 Android 11+（API 30+）。
   static bool get isAndroid11Plus => sdkInt >= 30;
 
+  /// 权限诊断：一次性导出整条判定链路（原生 checkSelfPermission / AppOps /
+  /// 文件系统实测），行列表；失败返回 null。设置页一键复制给开发者定位。
+  static Future<List<String>?> diagnose() async {
+    try {
+      return await _channel.invokeMethod<List<String>>('diagnose');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 弹出系统目录选择器；用户取消返回 null。
   static Future<String?> pickDirectory() async {
     return _channel.invokeMethod<String>('pickOutputDir');

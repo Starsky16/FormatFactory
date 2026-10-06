@@ -81,6 +81,50 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
             // 系统版本权威判定源（Build.VERSION.SDK_INT）。Dart 侧 Platform.version
             // 返回的是 Dart 运行时版本（"3.x…"），拿 Android 版本必须走这里。
             "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+            // 权限诊断：把整条判定链路一次性导出（返回文本行列表），
+            // 供设置页一键复制、用户回贴定位 ROM 魔改问题。
+            "diagnose" -> result.success(buildList {
+                add("sdkInt=${Build.VERSION.SDK_INT}")
+                fun perm(name: String) {
+                    val granted = checkSelfPermission(name) ==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                    add("checkSelfPermission[$name]=${if (granted) "GRANTED" else "DENIED"}")
+                }
+                perm(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                perm(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    add("isExternalStorageManager=${Environment.isExternalStorageManager()}")
+                }
+                // AppOps 层（华为系 ROM 有在此造假/漏登记的历史）
+                val appOps = getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager
+                val uid = android.os.Process.myUid()
+                val packageName = packageName
+                @Suppress("DEPRECATION")
+                fun op(modeOf: (android.app.AppOpsManager) -> Int, label: String) {
+                    try {
+                        add("$label=${modeOf(appOps)}")
+                    } catch (e: Exception) {
+                        add("$label=异常:${e.message}")
+                    }
+                }
+                op({ it.checkOpNoThrow(
+                    android.app.AppOpsManager.OPSTR_READ_EXTERNAL_STORAGE, uid, packageName
+                ) }, "appops.read")
+                // 文件系统实测：根目录 / 下载目录 / 应用专属目录
+                fun probe(path: String) {
+                    val f = File(path)
+                    add("probe[$path] exists=${f.exists()} canRead=${f.canRead()}")
+                    try {
+                        val n = f.listFiles()?.size ?: -1
+                        add("  list=$n")
+                    } catch (e: Exception) {
+                        add("  list异常=${e.javaClass.simpleName}:${e.message}")
+                    }
+                }
+                probe("/storage/emulated/0/")
+                probe("/storage/emulated/0/Download")
+                probe(getExternalFilesDir(null)?.absolutePath ?: "/data/unknown")
+            })
             "pickOutputDir" -> {
                 pendingPick = result
                 openTree.launch(null)
