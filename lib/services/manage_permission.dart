@@ -62,6 +62,13 @@ class ManagePermission {
     }
     if (await canReadSharedStorage()) return true;
     var status = await Permission.storage.request();
+    // 低版本上插件的 runtime 权限状态是可靠的（不可靠的是高版本的 AppOps
+    // 查询）：用户点过"不再询问"后 request() 不再弹框、静默失败，会把
+    // 用户卡死——拉起应用设置页让用户手动开，回来后再实测一次
+    if (status.isPermanentlyDenied) {
+      await openAppSettings();
+      return canReadSharedStorage();
+    }
     if (!status.isGranted) status = await Permission.storage.request();
     // 插件报了授权仍要实测确认（状态误报/进程组未刷新都拦在这里）
     return status.isGranted && await canReadSharedStorage();
