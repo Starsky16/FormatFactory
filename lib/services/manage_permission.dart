@@ -25,15 +25,31 @@ class ManagePermission {
   static Future<bool> ensureLegacyStorageForPublicOutput() async {
     if (!Platform.isAndroid) return true;
     if (StorageAccess.sdkInt >= 29) return true; // Android 10+ 走 MediaStore
-    if (await Permission.storage.isGranted) return true;
+    if (await canReadSharedStorage()) return true;
     final status = await Permission.storage.request();
-    return status.isGranted;
+    return status.isGranted && await canReadSharedStorage();
   }
 
-  /// 是否已授予（Android 11+ 走原生 API，低版本走插件）。
+  /// 实测共享存储可读（Android 10 及以下低版本的**权威判定源**）。
+  ///
+  /// 背景：鸿蒙 4.0（Android 9）实测 permission_handler 报 storage 已授权、
+  /// 但 Directory.list() 仍 errno 13 ——插件状态可能与系统真实授权不符
+  ///（尤其经系统设置页授权后，进程的存储补充组要完全重启应用才刷新）。
+  /// 因此低版本判定一律试读公共存储根目录，不采信插件状态。
+  static Future<bool> canReadSharedStorage() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      Directory('/storage/emulated/0/').listSync(followLinks: false).take(1);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 是否已授予（Android 11+ 走原生 API，低版本走实测）。
   static Future<bool> isGranted() async {
     if (isAndroid11Plus) return StorageAccess.isExternalStorageManager();
-    return Permission.storage.isGranted;
+    return canReadSharedStorage();
   }
 
   /// 请求授权；返回最终是否可用（false 表示用户仍未授权，需调用方提示）。
@@ -44,9 +60,10 @@ class ManagePermission {
       await Permission.manageExternalStorage.request();
       return StorageAccess.isExternalStorageManager();
     }
-    var status = await Permission.storage.status;
+    if (await canReadSharedStorage()) return true;
+    var status = await Permission.storage.request();
     if (!status.isGranted) status = await Permission.storage.request();
-    if (status.isPermanentlyDenied) await openAppSettings();
-    return status.isGranted;
+    // 插件报了授权仍要实测确认（状态误报/进程组未刷新都拦在这里）
+    return status.isGranted && await canReadSharedStorage();
   }
 }
