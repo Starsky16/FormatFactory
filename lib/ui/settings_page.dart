@@ -39,11 +39,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   static Future<PermissionStatus> _permStatus() async {
     if (_isAndroid11Plus) {
-      // Android 16 上 permission_handler 的 AppOps 查询漏报
-      //（系统已授权但插件仍报 denied），必须用平台 API 权威判定
-      final native = await StorageAccess.isExternalStorageManager();
-      if (native) return Future.value(PermissionStatus.granted);
-      return Permission.manageExternalStorage.status;
+      // Android 11+ 只信平台 API：permission_handler 在 Android 16 上漏报
+      //（系统已授权但插件仍报 denied），完全不采信
+      final ok = await StorageAccess.isExternalStorageManager();
+      return ok ? PermissionStatus.granted : PermissionStatus.denied;
     }
     return Permission.storage.status; // Android 10 及以下
   }
@@ -63,22 +62,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         messenger.showSnackBar(const SnackBar(content: Text('已获得文件访问权限')));
         return;
       }
-      final s = await Permission.manageExternalStorage.request();
-      // Android 16 兜底：插件状态可能漏报，再问一次平台 API
-      final native = await StorageAccess.isExternalStorageManager();
+      // 拉起系统"所有文件访问"开关页；回来后只以平台 API 为准
+      await Permission.manageExternalStorage.request();
+      final ok = await StorageAccess.isExternalStorageManager();
       await _refreshPermission();
-      if (s.isGranted || native) {
+      if (ok) {
         messenger.showSnackBar(const SnackBar(content: Text('已获得文件访问权限')));
-        return;
-      }
-      if (s.isPermanentlyDenied) {
-        await openAppSettings();
-        messenger.showSnackBar(const SnackBar(
-          content: Text('请在系统设置中开启"所有文件访问"后再返回本页重试'),
-        ));
       } else {
         messenger.showSnackBar(const SnackBar(
-          content: Text('未授权。你可以在系统设置中开启后再试'),
+          content: Text('未授权。请在系统设置的"所有文件访问"里开启本应用'),
         ));
       }
       return;
