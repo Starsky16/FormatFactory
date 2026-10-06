@@ -245,7 +245,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                       padding: const EdgeInsets.all(24),
                       child: Text(
                         '无法读取该目录（可能没有访问权限或目录已不可用）：\n${snap.error}\n\n'
-                        '请确认已开启"文件管理权限"，再返回上一级目录重试。',
+                        '请确认已开启"文件管理权限"，再返回上一级目录重试。\n'
+                        '若权限已开启仍报错（尤其刚在系统设置里授权过），'
+                        '请完全退出本应用（从最近任务里划掉）后重新打开。',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: theme.colorScheme.error),
                       ),

@@ -38,7 +38,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final ok = await StorageAccess.isExternalStorageManager();
       return ok ? PermissionStatus.granted : PermissionStatus.denied;
     }
-    return Permission.storage.status; // Android 10 及以下
+    // Android 10 及以下：以实测目录可读为准（插件状态在鸿蒙上不可靠）
+    final ok = await ManagePermission.canReadSharedStorage();
+    return ok ? PermissionStatus.granted : PermissionStatus.denied;
   }
 
   Future<void> _refreshPermission() async {
@@ -70,10 +72,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
     final s = await Permission.storage.request();
+    // 插件报了授权仍以实测为准（鸿蒙等系统上状态可能失真）
+    final ok = s.isGranted && await ManagePermission.canReadSharedStorage();
     await _refreshPermission();
 
-    if (s.isGranted) {
+    if (ok) {
       messenger.showSnackBar(const SnackBar(content: Text('已获得文件访问权限')));
+      return;
+    }
+    if (s.isGranted && !ok) {
+      // 插件说授权了但实测读不了：多为系统设置页授权后进程存储组未刷新
+      messenger.showSnackBar(const SnackBar(
+        content: Text('权限已开启但尚未生效：请完全退出本应用（从最近任务里划掉）'
+            '后重新打开再试；若仍不行，请到系统设置的权限管理里确认"存储"已允许'),
+      ));
       return;
     }
     // Android 9 及以下：若被永久拒绝，引导去系统设置开启
