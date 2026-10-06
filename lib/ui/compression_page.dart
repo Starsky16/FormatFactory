@@ -34,6 +34,10 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
   final _segmentCtrl = TextEditingController();
   String _resolutionCap = '原始尺寸';
   String _fpsCap = '';
+
+  /// 处理方式：'transcode' = 精确压缩（重编码）；'remux' = 仅换容器
+  ///（不重编码，分段/裁剪按关键帧粗切，秒级完成）。
+  String _mode = 'transcode';
   bool _picking = false;
   bool _submitting = false;
 
@@ -173,32 +177,35 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
 
   Future<void> _submit() async {
     if (_files.isEmpty || _submitting) return;
+    final isRemux = _mode == 'remux';
     final targetMB = int.tryParse(_targetCtrl.text.trim());
-    if (targetMB == null || targetMB <= 0) {
+    if (!isRemux && (targetMB == null || targetMB <= 0)) {
       _toast('请填写目标体积（MB）');
       return;
     }
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _submitting = true);
 
-    // 入队前校验：每个文件按（裁剪后）时长算码率，目标过小直接拦下
-    for (final f in _files) {
-      final dur = effectiveDuration(
-        sourceDuration: f.info?.durationSeconds ?? 0,
-        trimStart: _trimStartCtrl.text,
-        trimEnd: _trimEndCtrl.text,
-      );
-      if (calcBitrates(
-            targetBytes: targetMB * 1024 * 1024,
-            durationSeconds: dur,
-          ) ==
-          null) {
-        if (mounted) setState(() => _submitting = false);
-        messenger.showSnackBar(SnackBar(content: Text(
-          '「${f.name}」按目标体积算出的画面码率太低（目标过小或时长过长），'
-          '建议调大目标体积或降低分辨率/帧率上限。',
-        )));
-        return;
+    // 入队前校验：压缩模式按（裁剪后）时长算码率，目标过小直接拦下
+    if (_mode == 'transcode') {
+      for (final f in _files) {
+        final dur = effectiveDuration(
+          sourceDuration: f.info?.durationSeconds ?? 0,
+          trimStart: _trimStartCtrl.text,
+          trimEnd: _trimEndCtrl.text,
+        );
+        if (calcBitrates(
+              targetBytes: targetMB! * 1024 * 1024,
+              durationSeconds: dur,
+            ) ==
+            null) {
+          if (mounted) setState(() => _submitting = false);
+          messenger.showSnackBar(SnackBar(content: Text(
+            '「${f.name}」按目标体积算出的画面码率太低（目标过小或时长过长），'
+            '建议调大目标体积或降低分辨率/帧率上限。',
+          )));
+          return;
+        }
       }
     }
 
@@ -217,12 +224,16 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
         kind: MediaKind.video,
         inputPath: f.path,
         inputName: f.name,
-        presetId: FfmpegEngine.compressPresetId,
-        presetName: '视频压缩',
+        // remux = 复用转换页"仅换容器"预设（-c copy，关键帧粗切秒级完成）
+        presetId: isRemux ? 'video_remux' : FfmpegEngine.compressPresetId,
+        presetName: isRemux ? '仅换容器' : '视频压缩',
         settings: ConvertSettings({
-          SettingKey.targetVolumeMB: '$targetMB',
-          SettingKey.resolutionCap: _resolutionCap,
-          if (_fpsCap.isNotEmpty) SettingKey.fpsCap: _fpsCap,
+          // 压缩模式才带体积/分辨率/帧率；remux 只有裁剪与分段
+          if (!isRemux) ...{
+            SettingKey.targetVolumeMB: '$targetMB',
+            SettingKey.resolutionCap: _resolutionCap,
+            if (_fpsCap.isNotEmpty) SettingKey.fpsCap: _fpsCap,
+          },
           if (_trimStartCtrl.text.trim().isNotEmpty)
             SettingKey.trimStart: _trimStartCtrl.text.trim(),
           if (_trimEndCtrl.text.trim().isNotEmpty)
@@ -280,44 +291,73 @@ class _CompressionPageState extends ConsumerState<CompressionPage> {
           for (final f in _files) _fileTile(f),
           if (_files.isNotEmpty) ...[
             const SizedBox(height: 8),
-            TextField(
-              controller: _targetCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: '目标体积（每文件）',
-                suffixText: 'MB',
-                hintText: '压到多少 MB',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _resolutionCap,
-              decoration: const InputDecoration(
-                labelText: '分辨率上限',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final o in _resolutionOptions)
-                  DropdownMenuItem(value: o, child: Text(o)),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'transcode',
+                  icon: Icon(Icons.compress),
+                  label: Text('精确压缩'),
+                ),
+                ButtonSegment(
+                  value: 'remux',
+                  icon: Icon(Icons.bolt),
+                  label: Text('仅换容器'),
+                ),
               ],
-              onChanged: (v) => setState(() => _resolutionCap = v ?? '原始尺寸'),
+              selected: {_mode},
+              onSelectionChanged: (v) => setState(() => _mode = v.first),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _fpsCap,
-              decoration: const InputDecoration(
-                labelText: '帧率上限',
-                border: OutlineInputBorder(),
+            Padding(
+              padding: const EdgeInsets.only(top: 6, bottom: 4),
+              child: Text(
+                _mode == 'remux'
+                    ? '不重新编码，分段/裁剪按关键帧粗切（起点可能略偏），秒级完成。'
+                    : '按目标体积重编码，压完体积接近你填的值。',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
               ),
-              items: [
-                for (final e in _fpsOptions.entries)
-                  DropdownMenuItem(value: e.key, child: Text(e.value)),
-              ],
-              onChanged: (v) => setState(() => _fpsCap = v ?? ''),
             ),
-            const SizedBox(height: 4),
+            if (_mode == 'transcode') ...[
+              TextField(
+                controller: _targetCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: '目标体积（每文件）',
+                  suffixText: 'MB',
+                  hintText: '压到多少 MB',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _resolutionCap,
+                decoration: const InputDecoration(
+                  labelText: '分辨率上限',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final o in _resolutionOptions)
+                    DropdownMenuItem(value: o, child: Text(o)),
+                ],
+                onChanged: (v) =>
+                    setState(() => _resolutionCap = v ?? '原始尺寸'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _fpsCap,
+                decoration: const InputDecoration(
+                  labelText: '帧率上限',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final e in _fpsOptions.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) => setState(() => _fpsCap = v ?? ''),
+              ),
+              const SizedBox(height: 4),
+            ],
             _advanced(theme),
           ],
         ],

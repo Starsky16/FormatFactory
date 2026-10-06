@@ -15,6 +15,18 @@ class StorageAccess {
     return _channel.invokeMethod<String>('pickOutputDir');
   }
 
+  /// "所有文件访问"权威判定（原生 Environment.isExternalStorageManager()）。
+  /// Android 16 上 permission_handler 的 AppOps 查询不可靠，必须走平台 API；
+  /// 通道异常（如单元测试环境）返回 false 由调用方兜底。
+  static Future<bool> isExternalStorageManager() async {
+    try {
+      return await _channel.invokeMethod<bool>('isExternalStorageManager') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 把 [srcPath] 文件复制到 [treeUri] 目录下，命名为 [fileName]。
   /// 返回目标文件的 content uri；失败返回 null。
   static Future<String?> copyToTree({
