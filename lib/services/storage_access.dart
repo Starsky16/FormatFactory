@@ -29,9 +29,11 @@ class StorageAccess {
 
   /// 权限诊断：一次性导出整条判定链路（原生 checkSelfPermission / AppOps /
   /// 文件系统实测），行列表；失败时返回带失败原因的行（诊断本身不该静默）。
+  /// ⚠️ 通道解码回来是 List<Object?>，必须 cast，直接 as List<String?> 会炸。
   static Future<List<String>?> diagnose() async {
     try {
-      return await _channel.invokeMethod<List<String>>('diagnose');
+      final raw = await _channel.invokeMethod<List>('diagnose');
+      return raw?.cast<String>();
     } catch (e) {
       return ['diagnose通道异常: $e'];
     }
