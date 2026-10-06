@@ -14,19 +14,17 @@ import 'storage_access.dart';
 class ManagePermission {
   ManagePermission._();
 
-  static bool get isAndroid11Plus {
-    if (!Platform.isAndroid) return false;
-    final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-    return v >= 30;
-  }
+  /// 是否 Android 11+（API 30+）。判定源 = 原生 Build.VERSION.SDK_INT
+  ///（经 StorageAccess 预热缓存）——dart:io 的 Platform.version 在 Android
+  /// 上返回的是 Dart 运行时版本（"3.x…"），绝不能用它判系统版本。
+  static bool get isAndroid11Plus => StorageAccess.isAndroid11Plus;
 
   /// Android 10 及以下：把文件写进公共 `Download/` 需要经典存储权限。
   /// Android 11+ 无需此权限：无权限时会退回 MediaStore 导入（见 StorageAccess）。
   /// 返回是否已可用；不阻塞流程（拿不到就交给 MediaStore 兜底）。
   static Future<bool> ensureLegacyStorageForPublicOutput() async {
     if (!Platform.isAndroid) return true;
-    final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-    if (v >= 29) return true; // Android 10+ 走 MediaStore，不需要权限
+    if (StorageAccess.sdkInt >= 29) return true; // Android 10+ 走 MediaStore
     if (await Permission.storage.isGranted) return true;
     final status = await Permission.storage.request();
     return status.isGranted;

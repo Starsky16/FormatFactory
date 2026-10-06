@@ -78,6 +78,9 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                             Environment.isExternalStorageManager()
                 )
             }
+            // 系统版本权威判定源（Build.VERSION.SDK_INT）。Dart 侧 Platform.version
+            // 返回的是 Dart 运行时版本（"3.x…"），拿 Android 版本必须走这里。
+            "sdkInt" -> result.success(Build.VERSION.SDK_INT)
             "pickOutputDir" -> {
                 pendingPick = result
                 openTree.launch(null)

@@ -5,10 +5,27 @@ import 'package:flutter/services.dart';
 ///  2. 把一个已转好的本地文件复制进该目录（SAF）
 ///  3. 把一个已转好的本地文件导入系统"下载"目录（MediaStore，Android 10+ 免权限）
 class StorageAccess {
-  StorageAccess._();
-
   static const MethodChannel _channel =
       MethodChannel('com.formatfactory.app/storage');
+
+  int? _sdkInt;
+  StorageAccess._internal();
+  static final StorageAccess _instance = StorageAccess._internal();
+
+  /// Android API level（原生 Build.VERSION.SDK_INT 权威判定）。
+  ///
+  /// ⚠️ dart:io 的 Platform.version 在 Android 上返回的是 Dart 运行时版本
+  ///（"3.x…"），拿不到 Android 版本——历史上用它判版本导致 Android 11+
+  /// 全被当成 10 及以下处理。启动时（main）调 [warmupSdk] 预热，之后同步读 [sdkInt]。
+  static Future<void> warmupSdk() async {
+    _instance._sdkInt = await _channel.invokeMethod<int>('sdkInt');
+  }
+
+  /// 已预热的 API level；未预热（如单测环境）返回 0。
+  static int get sdkInt => _instance._sdkInt ?? 0;
+
+  /// 是否 Android 11+（API 30+）。
+  static bool get isAndroid11Plus => sdkInt >= 30;
 
   /// 弹出系统目录选择器；用户取消返回 null。
   static Future<String?> pickDirectory() async {

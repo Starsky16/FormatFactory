@@ -31,14 +31,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
-  static bool get _isAndroid11Plus {
-    if (!Platform.isAndroid) return false;
-    final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-    return v >= 30; // Android 11 = API 30
-  }
-
   static Future<PermissionStatus> _permStatus() async {
-    if (_isAndroid11Plus) {
+    if (StorageAccess.isAndroid11Plus) {
       // Android 11+ 只信平台 API：permission_handler 在 Android 16 上漏报
       //（系统已授权但插件仍报 denied），完全不采信
       final ok = await StorageAccess.isExternalStorageManager();
@@ -56,7 +50,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// 请求"所有文件访问"权限。
   Future<void> _grantManage() async {
     final messenger = ScaffoldMessenger.of(context);
-    if (_isAndroid11Plus) {
+    if (StorageAccess.isAndroid11Plus) {
       if (await StorageAccess.isExternalStorageManager()) {
         await _refreshPermission();
         messenger.showSnackBar(const SnackBar(content: Text('已获得文件访问权限')));
@@ -132,8 +126,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               final messenger = ScaffoldMessenger.of(context);
               // Android 13+ 首次开启时申请通知权限
               if (on && Platform.isAndroid) {
-                final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-                if (v >= 33) {
+                if (StorageAccess.sdkInt >= 33) {
                   final s = await Permission.notification.request();
                   if (!s.isGranted) {
                     messenger.showSnackBar(const SnackBar(
@@ -478,7 +471,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final title = granted ? '文件管理权限已开启' : '文件管理权限未开启';
     final body = granted
         ? '已开启：可以浏览整台设备的文件。'
-        : (_isAndroid11Plus
+        : (StorageAccess.isAndroid11Plus
             ? 'Android 11+：需要到系统设置里开启"所有文件访问"，才能用文件管理权限读取文件。'
             : 'Android 10 及以下：需要授予存储权限后才能浏览文件。');
     return Card(
