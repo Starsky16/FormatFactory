@@ -19,6 +19,7 @@ class HistoryEntry {
     required this.status,
     required this.createdAt,
     required this.finishedAt,
+    this.inputBytes,
   });
 
   final String taskId;
@@ -32,6 +33,9 @@ class HistoryEntry {
   final TaskStatus status;
   final DateTime createdAt;
   final DateTime finishedAt;
+
+  /// 源文件体积（字节），压缩任务展示前后体积对比用；null = 未知/旧记录。
+  final int? inputBytes;
 
   static HistoryEntry fromRow(Map<String, Object?> row) {
     final rawSettings = (row['settings_json'] as String?) ?? '{}';
@@ -54,6 +58,7 @@ class HistoryEntry {
           DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
       finishedAt:
           DateTime.fromMillisecondsSinceEpoch(row['finished_at'] as int),
+      inputBytes: row['input_bytes'] as int?,
     );
   }
 }

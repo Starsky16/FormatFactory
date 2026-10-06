@@ -1,7 +1,7 @@
 name: format_factory
 description: "Android 格式工厂：视频/音频/图片格式互转、网易云/QQ音乐/酷狗加密音乐脱壳、B站缓存无损合并为 MP4，全部本地处理"
 publish_to: 'none'
-version: 0.5.0+17
+version: 0.6.0+18
 
 environment:
   sdk: ^3.13.2

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models.dart';
+import '../services/compress_calc.dart';
+import '../services/ffmpeg_engine.dart';
 import '../state/task_queue.dart';
 
 /// 任务列表页：显示全部任务、实时进度，支持取消/重试/分享。
@@ -136,7 +138,7 @@ class _TaskTile extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      _outputLine,
+                      _effectLine,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall
@@ -195,7 +197,23 @@ class _TaskTile extends StatelessWidget {
     );
   }
 
-  /// 成功后"文件在哪"的一行说明：
+  /// 成功后的一行说明：
+  ///  - 压缩任务：显示"压前 → 压后（−xx%）"体积对比，外加所在位置
+  ///  - 其他任务：显示"文件在哪"
+  ///  - SAF / 系统下载目录：提示已搬运，并说明内部仍留一份可分享的副本
+  String get _effectLine {
+    final out = File(task.outputPath);
+    final outBytes = out.existsSync() ? out.lengthSync() : 0;
+    final where = _outputLine;
+    if (task.presetId == FfmpegEngine.compressPresetId &&
+        task.inputBytes != null) {
+      final effect = compressEffectText(task.inputBytes!, outBytes);
+      return effect.isEmpty ? where : '$effect · $where';
+    }
+    return where;
+  }
+
+  /// "文件在哪"的一行说明：
   ///  - 直接写最终目录（默认目录 / 应用专属目录）：显示真实路径
   ///  - SAF / 系统下载目录：提示已搬运，并说明内部仍留一份可分享的副本
   String get _outputLine {
@@ -222,12 +240,23 @@ class _TaskTile extends StatelessWidget {
       ).read(taskQueueProvider.notifier);
 
   void _showError(BuildContext context) {
+    // 失败时 FFmpeg 全量日志已落盘（输出文件旁的 .log），一并展示便于排查
+    var detail = task.error ?? '未知错误';
+    final log = File('${task.outputPath}.log');
+    if (log.existsSync()) {
+      var content = log.readAsStringSync();
+      // 日志可能非常大，弹窗里只放末尾 4000 字符
+      if (content.length > 4000) {
+        content = content.substring(content.length - 4000);
+      }
+      detail = '$detail\n\n―― FFmpeg 日志末尾（完整日志见 ${log.path}）――\n$content';
+    }
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('失败原因'),
         content: SingleChildScrollView(
-          child: Text(task.error ?? '未知错误',
+          child: SelectableText(detail,
               style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
         ),
         actions: [

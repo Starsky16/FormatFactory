@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+
+import 'storage_access.dart';
 
 /// 前台通知封装（基于 flutter_foreground_task）。
 ///
@@ -36,15 +39,22 @@ class ForegroundNotifier {
   static Future<void> start() async {
     if (_started) return;
     try {
+      // Android 15+ 用转码专用的 mediaProcessing 类型——dataSync 在
+      // Android 15/16 上对转码类场景限制收紧（实测挂后台进程被冻结、
+      // CPU 全停）；老系统没有此类型，保持 dataSync。
+      final types = StorageAccess.sdkInt >= 35
+          ? [ForegroundServiceTypes.mediaProcessing]
+          : [ForegroundServiceTypes.dataSync];
       await FlutterForegroundTask.startService(
-        serviceTypes: [ForegroundServiceTypes.dataSync],
+        serviceTypes: types,
         notificationTitle: '格式工厂',
         notificationText: '准备转换…',
         callback: _serviceEntry,
       );
       _started = true;
-    } catch (_) {
+    } catch (e) {
       _started = false; // 失败不阻塞转换，只是没有后台保活/通知
+      debugPrint('ForegroundNotifier.start 失败：$e（后台转码可能被系统暂停）');
     }
   }
 

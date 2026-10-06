@@ -11,7 +11,6 @@ import '../services/unlock_api.dart';
 import '../state/app_settings.dart';
 import '../state/task_queue.dart';
 import 'file_browser_page.dart';
-import 'picked_media.dart';
 
 /// 按源扩展名显示脱壳名称。
 String unlockLabelFor(String ext) => switch (ext) {

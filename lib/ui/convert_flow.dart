@@ -105,6 +105,7 @@ class _ConvertFlowState extends ConsumerState<ConvertFlow> {
 
       setState(() => _files.addAll(fresh));
       _probeAll(fresh);
+      _hintBigFiles(fresh);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -165,6 +166,19 @@ class _ConvertFlowState extends ConsumerState<ConvertFlow> {
     } catch (_) {
       return 0;
     }
+  }
+
+  /// 大文件提示：系统选择器（SAF）会先把文件复制进应用缓存再给路径，
+  /// 4GB 级视频要等数秒到数十秒；设备浏览模式直接读原路径，零复制。
+  void _hintBigFiles(List<PickedMedia> fresh) {
+    const bigThreshold = 1024 * 1024 * 1024;
+    if (!fresh.any((f) => f.sizeBytes > bigThreshold)) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('检测到大文件：系统文件选择器会先把文件复制到应用缓存，'
+          '首次选取可能较慢。建议到「设置 → 文件选择方式」切换为设备浏览，'
+          '直接读取原文件，无需复制。'),
+      duration: Duration(seconds: 5),
+    ));
   }
 
   /// 逐个用 FFprobe 读信息（用于显示与算进度）。

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'picked_media.dart';
+import '../models.dart';
 
 /// "文件管理权限"读取方式下的自建文件浏览器。
 /// 允许在目录间跳转、多选支持格式的文件，确定后把选中文件的路径 pop 回上一页。

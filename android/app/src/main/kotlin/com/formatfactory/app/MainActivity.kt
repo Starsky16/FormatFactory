@@ -67,6 +67,20 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            // "所有文件访问"权威判定：Environment.isExternalStorageManager()。
+            // Android 16 上 permission_handler 的 AppOps 查询不可靠（系统设置已
+            // 授权但插件仍报未授权），必须用平台 API 判定。
+            // API < 30 无此权限模型，直接返回 true。
+            "isExternalStorageManager" -> {
+                @Suppress("DEPRECATION")
+                result.success(
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+                            Environment.isExternalStorageManager()
+                )
+            }
+            // 系统版本权威判定源（Build.VERSION.SDK_INT）。Dart 侧 Platform.version
+            // 返回的是 Dart 运行时版本（"3.x…"），拿 Android 版本必须走这里。
+            "sdkInt" -> result.success(Build.VERSION.SDK_INT)
             "pickOutputDir" -> {
                 pendingPick = result
                 openTree.launch(null)

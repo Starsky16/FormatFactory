@@ -2,49 +2,51 @@ import 'dart:io';
 
 import 'package:permission_handler/permission_handler.dart';
 
-/// "文件管理权限"模式共用助手（设置页 / 转换页 / 脱壳页都会用到）：
-///  - Android 11+：请求"所有文件访问"
-///  - Android 10 及以下：请求经典存储权限
+import 'storage_access.dart';
+
+/// "文件管理权限"模式共用助手（设置页 / 转换页 / 脱壳页都会用到）。
+///
+/// 判定按系统版本**彻底两套逻辑**、互不混用（单一事实源）：
+///  - Android 11+：只信原生 Environment.isExternalStorageManager()。
+///    permission_handler 的 AppOps 查询在高版本上不可靠
+///    （Android 16 实测：系统已授权但插件仍报 denied），一律不兜底。
+///  - Android 10 及以下：只走 permission_handler 的经典存储权限。
 class ManagePermission {
   ManagePermission._();
 
-  static bool get isAndroid11Plus {
-    if (!Platform.isAndroid) return false;
-    final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-    return v >= 30;
-  }
+  /// 是否 Android 11+（API 30+）。判定源 = 原生 Build.VERSION.SDK_INT
+  ///（经 StorageAccess 预热缓存）——dart:io 的 Platform.version 在 Android
+  /// 上返回的是 Dart 运行时版本（"3.x…"），绝不能用它判系统版本。
+  static bool get isAndroid11Plus => StorageAccess.isAndroid11Plus;
 
   /// Android 10 及以下：把文件写进公共 `Download/` 需要经典存储权限。
   /// Android 11+ 无需此权限：无权限时会退回 MediaStore 导入（见 StorageAccess）。
   /// 返回是否已可用；不阻塞流程（拿不到就交给 MediaStore 兜底）。
   static Future<bool> ensureLegacyStorageForPublicOutput() async {
     if (!Platform.isAndroid) return true;
-    final v = int.tryParse(Platform.version.split('.').first) ?? 0;
-    if (v >= 29) return true; // Android 10+ 走 MediaStore，不需要权限
+    if (StorageAccess.sdkInt >= 29) return true; // Android 10+ 走 MediaStore
     if (await Permission.storage.isGranted) return true;
     final status = await Permission.storage.request();
     return status.isGranted;
   }
 
-  /// 是否已授予。
+  /// 是否已授予（Android 11+ 走原生 API，低版本走插件）。
   static Future<bool> isGranted() async {
-    if (isAndroid11Plus) return Permission.manageExternalStorage.isGranted;
+    if (isAndroid11Plus) return StorageAccess.isExternalStorageManager();
     return Permission.storage.isGranted;
   }
 
-  /// 请求授权；被永久拒绝时自动跳系统设置。
-  /// 返回最终是否可用（false 表示用户仍未授权，需调用方提示）。
+  /// 请求授权；返回最终是否可用（false 表示用户仍未授权，需调用方提示）。
   static Future<bool> ensureGranted() async {
-    final perm =
-        isAndroid11Plus ? Permission.manageExternalStorage : Permission.storage;
-    var status = await perm.status;
-    if (!status.isGranted) {
-      status = await perm.request();
+    if (isAndroid11Plus) {
+      if (await StorageAccess.isExternalStorageManager()) return true;
+      // 系统授权开关页只有这里能拉起；返回后调用方再问一次 isGranted()
+      await Permission.manageExternalStorage.request();
+      return StorageAccess.isExternalStorageManager();
     }
-    if (status.isGranted) return true;
-    if (status.isPermanentlyDenied) {
-      await openAppSettings();
-    }
-    return false;
+    var status = await Permission.storage.status;
+    if (!status.isGranted) status = await Permission.storage.request();
+    if (status.isPermanentlyDenied) await openAppSettings();
+    return status.isGranted;
   }
 }
