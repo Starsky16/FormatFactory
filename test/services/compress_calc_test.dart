@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/services/compress_calc.dart';
+import 'package:formatfactory/services/compress_calc.dart';
 
 /// 视频压缩/裁剪/分段的纯函数单元测试。
 /// 覆盖：时间输入容错解析、有效时长（越界夹取）、按目标体积算视频码率

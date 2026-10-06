@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/services/file_store.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/services/file_store.dart';
 
 /// P4 输出目录改造的纯函数部分（不依赖 path_provider / 原生通道）。
 void main() {

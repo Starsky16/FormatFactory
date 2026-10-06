@@ -60,7 +60,7 @@ class FileStore {
   static const String publicDirName = 'FormatExport';
 
   /// 可写性探针文件名（写在用户的输出目录里，随即删除）。
-  static const String probeFileName = '.format_factory_write_test';
+  static const String probeFileName = '.formatfactory_write_test';
 
   /// MediaStore 导入用的相对路径：`Download/FormatExport/<类别>`。
   static String mediaStoreDirFor(MediaKind kind) =>

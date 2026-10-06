@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/state/app_settings.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/state/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

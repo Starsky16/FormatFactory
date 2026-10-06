@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:format_factory/formats.dart';
-import 'package:format_factory/formats_data.dart';
-import 'package:format_factory/models.dart';
-import 'package:format_factory/services/bili_cache.dart';
-import 'package:format_factory/services/ffmpeg_engine.dart';
-import 'package:format_factory/ui/convert_flow.dart';
+import 'package:formatfactory/formats.dart';
+import 'package:formatfactory/formats_data.dart';
+import 'package:formatfactory/models.dart';
+import 'package:formatfactory/services/bili_cache.dart';
+import 'package:formatfactory/services/ffmpeg_engine.dart';
+import 'package:formatfactory/ui/convert_flow.dart';
 
 /// 转码补强的命令拼装测试（T8 视频→音频 / T9 仅换容器 / T10 自定义 MP4 faststart）。
 /// 只断言"拼出来的命令"，不跑真实 FFmpeg。
