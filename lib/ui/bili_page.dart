@@ -8,6 +8,7 @@ import '../models.dart';
 import '../services/bili_cache.dart';
 import '../services/file_store.dart';
 import '../services/manage_permission.dart';
+import '../services/storage_access.dart';
 import '../state/app_settings.dart';
 import '../state/task_queue.dart';
 import 'file_browser_page.dart';
@@ -31,6 +32,9 @@ class _BiliPageState extends ConsumerState<BiliPage> {
   final Set<String> _selected = {};
 
   bool _scanning = false;
+
+  /// SAF 副本镜像进行中（Android 13+ fallback，整树拷贝耗时不定）。
+  bool _importing = false;
   bool _submitting = false;
   bool _reencode = false;
   String? _error;
@@ -85,6 +89,44 @@ class _BiliPageState extends ConsumerState<BiliPage> {
     );
     if (picked == null || picked.isEmpty || !mounted) return;
     await _scan(picked.first);
+  }
+
+  /// Android 13+ 的系统限制：其他应用的 Android/data 直读被彻底封死
+  ///（"所有文件访问"也读不了，SAF 也进不去那个目录）。
+  /// fallback：用户用系统文件管理器把缓存目录复制到普通位置（如"下载"），
+  /// 这里选副本目录 → 原生整树镜像进工作区 → 用现有扫描逻辑跑镜像。
+  Future<void> _importViaSaf() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await StorageAccess.pickDirectory();
+    if (picked == null || !mounted) return;
+    setState(() {
+      _importing = true;
+      _error = null;
+    });
+    final work = await FileStore.workDir(MediaKind.video);
+    final r = await StorageAccess.importTree(
+      treeUri: picked,
+      destDir: '${work.path}${Platform.pathSeparator}BiliImport',
+    );
+    if (!mounted) return;
+    if (r == null) {
+      setState(() => _importing = false);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('导入失败：无法读取所选目录，请确认选的是复制出来的缓存副本目录'),
+      ));
+      return;
+    }
+    if (r.files == 0) {
+      setState(() => _importing = false);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('所选目录是空的。请确认选的是复制出来的 download 目录'
+            '（里面应有以数字命名的子文件夹和 entry.json）'),
+      ));
+      return;
+    }
+    // _scan 内部会接管 _scanning/_importing 状态并渲染列表
+    setState(() => _importing = false);
+    await _scan(r.mirrorDir);
   }
 
   /// 扫描指定目录；解析失败给出提示而不是崩溃。
@@ -202,6 +244,19 @@ class _BiliPageState extends ConsumerState<BiliPage> {
   }
 
   Widget _body(ThemeData theme) {
+    if (_importing) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('正在复制缓存副本到工作区…\n取决于缓存大小，可能需要一会儿',
+                textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
     if (_scanning) {
       return const Center(
         child: Column(
@@ -274,6 +329,37 @@ class _BiliPageState extends ConsumerState<BiliPage> {
             onPressed: _pickDirectory,
             icon: const Icon(Icons.folder_open),
             label: const Text('选择缓存目录'),
+          ),
+          const SizedBox(height: 16),
+          // Android 13+ 系统封死其他应用 Android/data 的直读与 SAF 访问，
+          // 内置浏览器这条路在那之后系统上走不通 → 提供"副本导入"
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('系统限制时的替代导入（Android 13+）',
+                      style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Text(
+                    '如果你的系统不允许应用读取 B站缓存目录（选目录后报读取失败'
+                    '就是这种情况）：\n'
+                    '1. 用系统自带"文件管理"找到并进入 '
+                    'Android/data/tv.danmaku.bili/download\n'
+                    '2. 把整个 download 文件夹复制到普通位置（如"下载"）\n'
+                    '3. 点下面按钮，选中复制出来的那个目录',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _importViaSaf,
+                    icon: const Icon(Icons.copy_all_outlined),
+                    label: const Text('从缓存副本目录导入'),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           Text(

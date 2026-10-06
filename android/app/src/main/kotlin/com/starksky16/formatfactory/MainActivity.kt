@@ -174,6 +174,54 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                     result.error("copy_failed", e.message, null)
                 }
             }
+            // ===== B 站缓存 SAF 副本导入 =====
+            // Android 13+ 系统严格封锁其他应用的 Android/data（MANAGE 也读不了、
+            // SAF 也进不去），直读路径失效。fallback：用户用系统文件管理器把
+            // B 站缓存目录复制到普通位置后，从这里选副本目录 → 整树镜像到
+            // 应用工作区 → Dart 侧用现成的 BiliCache.scan 扫描镜像。
+            "importTree" -> {
+                val treeUri = call.argument<String>("treeUri")
+                val destDir = call.argument<String>("destDir")
+                if (treeUri == null || destDir == null) {
+                    result.error("bad_args", "缺少参数", null)
+                    return
+                }
+                runAsync(result, errorCode = "import_failed") {
+                    val root = DocumentFile.fromTreeUri(this, Uri.parse(treeUri))
+                        ?: throw IllegalStateException("所选目录已不可访问，请重新选择")
+                    val dest = File(destDir)
+                    // 重新导入时清掉上次镜像，避免残留旧文件混进扫描结果
+                    if (dest.exists()) dest.deleteRecursively()
+                    if (!dest.mkdirs()) throw IllegalStateException("无法创建工作目录")
+                    var files = 0
+                    var bytes = 0L
+                    fun walk(src: DocumentFile, rel: String) {
+                        val outDir = File(dest, rel)
+                        if (!outDir.exists() && !outDir.mkdirs()) {
+                            throw IllegalStateException("无法创建目录：${outDir.path}")
+                        }
+                        for (child in src.listFiles()) {
+                            val name = child.name ?: continue
+                            if (child.isDirectory) {
+                                walk(child, if (rel.isEmpty()) name else "$rel/$name")
+                            } else {
+                                val out = File(outDir, name)
+                                contentResolver.openInputStream(child.uri)?.use { ins ->
+                                    out.outputStream().use { os -> ins.copyTo(os) }
+                                } ?: throw IllegalStateException("无法读取文件：$name")
+                                files++
+                                bytes += out.length()
+                            }
+                        }
+                    }
+                    walk(root, "")
+                    mapOf(
+                        "files" to files,
+                        "bytes" to bytes,
+                        "mirrorDir" to dest.absolutePath,
+                    )
+                }
+            }
             "copyToDownloads" -> {
                 val relativeDir = call.argument<String>("relativeDir")
                 val fileName = call.argument<String>("fileName")
