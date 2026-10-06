@@ -159,7 +159,7 @@ void main() {
         ),
         pass: 2,
       );
-      expect(cmd, contains('scale=-2:min(ih,720)'));
+      expect(cmd, contains('scale=-2:min(ih\\,720)'));
       expect(cmd, contains('-r 30'));
     });
 
@@ -225,7 +225,7 @@ void main() {
       ));
       expect(cmd, contains('-ss 10'));
       expect(cmd, contains('-t 60'));
-      expect(cmd, contains('scale=-2:min(ih,720)'));
+      expect(cmd, contains('scale=-2:min(ih\\,720)'));
       expect(cmd, contains('-r 30'));
     });
   });

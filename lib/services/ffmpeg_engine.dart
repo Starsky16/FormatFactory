@@ -65,12 +65,14 @@ class FfmpegEngine {
     }
 
     final args = <String>[];
-    // 分辨率/帧率上限（留空 = 不限制）
+    // 分辨率/帧率上限（留空 = 不限制）。
+    // filter 表达式里的逗号必须转义（\,），否则被 filtergraph 当成
+    // filter 链分隔符劈开（实测报 No such filter: '1080)'）
     final capMatch =
         RegExp(r'(\d+)').firstMatch(s.of(SettingKey.resolutionCap).trim());
     if (capMatch != null) {
       // 高度取 min(ih, N)：不超过上限，也不放大低分辨率源
-      args.addAll(['-vf', '"scale=-2:min(ih,${capMatch.group(1)})"']);
+      args.addAll(['-vf', '"scale=-2:min(ih\\,${capMatch.group(1)})"']);
     }
     final fps = int.tryParse(s.of(SettingKey.fpsCap).trim());
     if (fps != null && fps > 0) args.addAll(['-r', '$fps']);
