@@ -1,4 +1,4 @@
-package com.formatfactory.app.unlock
+package com.starksky16.formatfactory.unlock
 
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

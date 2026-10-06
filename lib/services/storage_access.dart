@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 ///  3. 把一个已转好的本地文件导入系统"下载"目录（MediaStore，Android 10+ 免权限）
 class StorageAccess {
   static const MethodChannel _channel =
-      MethodChannel('com.formatfactory.app/storage');
+      MethodChannel('com.starksky16.formatfactory/storage');
 
   int? _sdkInt;
   StorageAccess._internal();

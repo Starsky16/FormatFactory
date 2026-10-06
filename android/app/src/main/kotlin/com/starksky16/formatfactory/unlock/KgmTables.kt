@@ -1,4 +1,4 @@
-package com.formatfactory.app.unlock
+package com.starksky16.formatfactory.unlock
 
 /// 酷狗 KGM V2 掩码常量（取自 kugou-audio-unlock(MIT)，长度 272/272/272/17）。
 internal object KgmTables {

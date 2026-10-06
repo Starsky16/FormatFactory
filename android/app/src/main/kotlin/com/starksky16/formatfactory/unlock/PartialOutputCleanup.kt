@@ -1,4 +1,4 @@
-package com.formatfactory.app.unlock
+package com.starksky16.formatfactory.unlock
 
 import java.io.File
 import java.io.RandomAccessFile
