@@ -18,7 +18,7 @@ val keystoreProperties = Properties().apply {
 
 android {
     // 包名（应用唯一标识；如需上架应用商店，建议改为你自己域名的反写，如 com.yourname.xxx）
-    namespace = "com.formatfactory.app"
+    namespace = "com.starksky16.formatfactory"
     // 编译 SDK：跟随 Flutter 当前支持的最新版（Android 16 / API 36）
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -30,7 +30,7 @@ android {
 
     defaultConfig {
         // 包名（与上方 namespace 保持一致）
-        applicationId = "com.formatfactory.app"
+        applicationId = "com.starksky16.formatfactory"
         // 最低支持 Android 7.0 (API 24)。
         // ⚠️ 不要再调低：转码引擎 ffmpeg_kit_flutter_new 的底层库要求 minSdk >= 24
         minSdk = 24

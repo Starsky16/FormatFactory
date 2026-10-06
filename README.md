@@ -88,7 +88,7 @@
 用系统文件管理器进"下载"就能看到，卸载应用也不会被删。若没给应用"所有文件访问"权限，
 应用会自动改走系统"下载"（MediaStore）落盘，位置完全一样。
 也可以在"**设置 → 输出位置**"改成"应用专属目录"
-（`Android/data/com.formatfactory.app/files/FormatFactory/`，无需权限但卸载即删）或你自选的目录；
+（`Android/data/com.starksky16.formatfactory/files/FormatFactory/`，无需权限但卸载即删）或你自选的目录；
 任务完成后点"分享"还能另存到相册 / 发给其它应用。
 
 **Q：为什么从 Android 7.0 才开始支持？**

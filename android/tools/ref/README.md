@@ -11,7 +11,7 @@
 | kgm-py/（本地克隆） | https://github.com/onavcn/kugou-audio-unlock（decrypt_kgm.py 含 KGM V2 XOR 与表） | MIT（见克隆目录 LICENSE，不入库） |
 | kwm.go（未入库，仅核对） | unlock-music `um/cli` algo/kwm/kwm.go；原仓库 https://github.com/unlock-music/cli 已于 2022-11 被 DMCA 下架，经活镜像 https://code.tossp.com/ts/um（tag v0.0.5）WebFetch 核对算法与 LICENSE | MIT（Copyright 2020-2021 Unlock Music） |
 
-本仓库 Android 端的 `com.formatfactory.app.unlock.*` 各解密器：
+本仓库 Android 端的 `com.starksky16.formatfactory.unlock.*` 各解密器：
 - NcmUnlocker ← ncmcrypt.cpp 移植
 - QmcUnlocker ← qmc-js QMC 解密移植
 - KgmUnlocker / KgmTables ← decrypt_kgm.py KGM V2 XOR 移植（掩码表由脚本精确抽取）

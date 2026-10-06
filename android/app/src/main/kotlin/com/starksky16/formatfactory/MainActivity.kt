@@ -1,4 +1,4 @@
-package com.formatfactory.app
+package com.starksky16.formatfactory
 
 import android.content.ContentValues
 import android.content.Intent
@@ -16,10 +16,10 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
-import com.formatfactory.app.unlock.KgmUnlocker
-import com.formatfactory.app.unlock.KwmUnlocker
-import com.formatfactory.app.unlock.NcmUnlocker
-import com.formatfactory.app.unlock.QmcUnlocker
+import com.starksky16.formatfactory.unlock.KgmUnlocker
+import com.starksky16.formatfactory.unlock.KwmUnlocker
+import com.starksky16.formatfactory.unlock.NcmUnlocker
+import com.starksky16.formatfactory.unlock.QmcUnlocker
 
 /// 原生存储通道，供 Dart 侧 StorageAccess 调用：
 ///  - pickOutputDir    ：打开系统 SAF 目录选择器并持久化授权
@@ -56,12 +56,12 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
         // 存储通道（选目录 / 复制到 SAF 目录）
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "com.formatfactory.app/storage",
+            "com.starksky16.formatfactory/storage",
         ).setMethodCallHandler(this)
         // 音乐脱壳通道（.ncm 等解密）—— 必须单独注册，否则 Dart 会报 MissingPluginException
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "com.formatfactory.app/unlock",
+            "com.starksky16.formatfactory/unlock",
         ).setMethodCallHandler(this)
     }
 

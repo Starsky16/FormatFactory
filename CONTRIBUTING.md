@@ -37,7 +37,7 @@ android/app/src/test/.../unlock/          JVM 单元测试（含真实 .ncm 样�
 
 ## 想加一种格式？
 - **转码格式**：改 `lib/formats_*_data.dart`——复制一条 `FormatPreset` 改三处：`name/extension`（显示名与扩展名）、`fields`（设置页参数下拉框）、`buildArgs`（FFmpeg 参数，均有中文注释）
-- **脱壳格式**：Android `com.formatfactory.app.unlock.*`，照 Ncm/Qmc/Kgm 的实现 + JVM 单元测试
+- **脱壳格式**：Android `com.starksky16.formatfactory.unlock.*`，照 Ncm/Qmc/Kgm 的实现 + JVM 单元测试
 
 ## 想换主题色？
 改 `lib/theme.dart` 里的 `seedColor` 一个值，整套 Material 3 配色自动生成。

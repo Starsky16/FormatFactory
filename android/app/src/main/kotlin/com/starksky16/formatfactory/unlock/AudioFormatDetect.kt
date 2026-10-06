@@ -1,4 +1,4 @@
-package com.formatfactory.app.unlock
+package com.starksky16.formatfactory.unlock
 
 /**
  * 音频格式探测：按文件头字节识别脱壳后的真实格式。

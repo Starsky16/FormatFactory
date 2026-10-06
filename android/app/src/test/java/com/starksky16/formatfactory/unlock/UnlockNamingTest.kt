@@ -1,4 +1,4 @@
-package com.formatfactory.app.unlock
+package com.starksky16.formatfactory.unlock
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

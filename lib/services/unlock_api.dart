@@ -21,12 +21,12 @@ final List<String> kAllUnlockExtensions = [
   ...kKwmExtensions,
 ];
 
-/// 调 Android 原生"脱壳"通道（MainActivity 里的 com.formatfactory.app/unlock）。
+/// 调 Android 原生"脱壳"通道（MainActivity 里的 com.starksky16.formatfactory/unlock）。
 class UnlockApi {
   UnlockApi._();
 
   static const MethodChannel _channel =
-      MethodChannel('com.formatfactory.app/unlock');
+      MethodChannel('com.starksky16.formatfactory/unlock');
 
   /// 通用脱壳入口：按 [format]（源扩展名）路由到对应原生实现。
   /// 读 [src]，把解出的原始音频写到 [destDir] 目录，返回真实文件路径与扩展名。
