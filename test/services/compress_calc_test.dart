@@ -164,6 +164,25 @@ void main() {
       expect(segs.single.end, 300);
     });
 
+    test('毫秒级溢出不产生超界尾段（remux 产物再分段的核心坑）', () {
+      // remux 粗切产物的容器时长是 600.003628 这类毫秒溢出值：
+      // ceil(1200.007/600)=3 会凭空多出一段 [1200, 1200.007]，
+      // 该段 -ss 超界 + -c copy 产出乱时间戳垃圾文件，必须丢弃
+      final segs = segmentBounds(
+        durationSeconds: 600.003628 * 2,
+        segmentSeconds: 600,
+      );
+      expect(segs, hasLength(2));
+      expect(segs.last.end, closeTo(1200.007, 0.01));
+    });
+
+    test('单段毫秒溢出（600.0036/600）→ 1 段而不是 2 段', () {
+      final segs =
+          segmentBounds(durationSeconds: 600.003628, segmentSeconds: 600);
+      expect(segs, hasLength(1));
+      expect(segs.single.end, closeTo(600.0036, 0.01));
+    });
+
     test('分段 + 裁剪叠加：先裁再分', () {
       // 裁出 5:00~25:00 共 1200s，每段 600s → 2 段
       final segs = segmentBounds(

@@ -7,6 +7,8 @@
 ///   - segmentBounds       按每段时长切分段边界（可与裁剪叠加）
 library;
 
+import 'dart:math' as math;
+
 import '../models.dart';
 
 /// 解析用户输入的时间："1:23:45"=时:分:秒、"12:34"=分:秒、"90"=纯秒。
@@ -129,6 +131,9 @@ List<SegmentRange> segmentBounds({
   );
   if (eff <= 0) return const [];
 
+  // 段数：remux 粗切产物的容器时长带毫秒溢出（如 600.003628），ceil 会
+  // 凭空多算一个"超界尾段"，该段 -ss 超界 + -c copy 只会产出乱时间戳
+  // 垃圾文件（实测复现）。下面按"近零残段"统一丢弃。
   final count = (eff / segmentSeconds).ceil();
   final segs = <SegmentRange>[];
   for (var i = 0; i < count; i++) {
@@ -136,5 +141,9 @@ List<SegmentRange> segmentBounds({
     final segEnd = (segStart + segmentSeconds).clamp(s, s + eff);
     segs.add((start: segStart, end: segEnd.toDouble()));
   }
+  // 丢弃近零残段（有效时长不足 1s 或段秒的 1%）：毫秒级尾段切出来
+  // 也是垃圾文件；正常场景（如 32 分钟末段 2 分钟）不受影响
+  final minSeg = math.max(1.0, segmentSeconds * 0.01);
+  segs.removeWhere((seg) => seg.end - seg.start < minSeg);
   return segs;
 }
