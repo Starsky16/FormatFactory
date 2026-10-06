@@ -95,21 +95,39 @@ class MainActivity : FlutterFragmentActivity(), MethodChannel.MethodCallHandler 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     add("isExternalStorageManager=${Environment.isExternalStorageManager()}")
                 }
-                // AppOps 层（华为系 ROM 有在此造假/漏登记的历史）
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    add("isExternalStorageLegacy=${Environment.isExternalStorageLegacy()}")
+                }
+                // AppOps 层（华为系 ROM 有在此造假/漏登记的历史）。
+                // ⚠️ 必须接 Throwable：checkOpNoThrow(String,…) 是 API 29+ 重载，
+                // Android 9 上调用抛 NoSuchMethodError（Error 不是 Exception），
+                // 若只接 Exception 会把整个诊断带崩（实测教训）。
                 val appOps = getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager
                 val uid = android.os.Process.myUid()
                 val packageName = packageName
-                @Suppress("DEPRECATION")
-                fun op(modeOf: (android.app.AppOpsManager) -> Int, label: String) {
+                fun op(modeOf: (android.app.AppOpsManager) -> Any?, label: String) {
                     try {
                         add("$label=${modeOf(appOps)}")
-                    } catch (e: Exception) {
-                        add("$label=异常:${e.message}")
+                    } catch (e: Throwable) {
+                        add("$label=异常:${e.javaClass.simpleName}:${e.message}")
                     }
                 }
-                op({ it.checkOpNoThrow(
-                    android.app.AppOpsManager.OPSTR_READ_EXTERNAL_STORAGE, uid, packageName
-                ) }, "appops.read")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    op({ it.checkOpNoThrow(
+                        android.app.AppOpsManager.OPSTR_READ_EXTERNAL_STORAGE, uid, packageName
+                    ) }, "appops.read")
+                } else {
+                    // Android 9：字符串版不存在，走 int 版（公开 API，反射调用）
+                    op({
+                        val m = appOps.javaClass.getMethod(
+                            "checkOpNoThrow",
+                            Int::class.javaPrimitiveType,
+                            Int::class.javaPrimitiveType,
+                            String::class.java,
+                        )
+                        m.invoke(appOps, 43, uid, packageName) // 43 = OP_READ_EXTERNAL_STORAGE
+                    }, "appops.read(int)")
+                }
                 // 文件系统实测：根目录 / 下载目录 / 应用专属目录
                 fun probe(path: String) {
                     val f = File(path)

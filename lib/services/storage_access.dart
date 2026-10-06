@@ -28,12 +28,12 @@ class StorageAccess {
   static bool get isAndroid11Plus => sdkInt >= 30;
 
   /// 权限诊断：一次性导出整条判定链路（原生 checkSelfPermission / AppOps /
-  /// 文件系统实测），行列表；失败返回 null。设置页一键复制给开发者定位。
+  /// 文件系统实测），行列表；失败时返回带失败原因的行（诊断本身不该静默）。
   static Future<List<String>?> diagnose() async {
     try {
       return await _channel.invokeMethod<List<String>>('diagnose');
-    } catch (_) {
-      return null;
+    } catch (e) {
+      return ['diagnose通道异常: $e'];
     }
   }
 
