@@ -30,10 +30,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- flutter_foreground_task 前台服务（保持转码进程存活） -->
+        <!-- flutter_foreground_task 前台服务（保持转码进程存活）。
+             mediaProcessing：Android 15+ 专为视频转码设计的类型；dataSync 兜底老系统。
+             Android 15/16 对 dataSync 转码类场景限制收紧（实测挂后台进程被冻结） -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="dataSync|mediaProcessing"
             android:exported="false" />
     </application>
     <!-- ===== 读取文件方式 = "文件管理权限"时使用 ===== -->
@@ -49,6 +51,8 @@
     <!-- ===== 前台服务：后台转码时保活 + 通知进度 ===== -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 15+ 的 mediaProcessing 类型（转码专用）需要 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <!-- Android 13+ 显示通知需要 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
