@@ -100,6 +100,42 @@ void main() {
     });
   });
 
+  group('publicDirIn（默认目录必须先实测可写）', () {
+    late Directory root;
+    late Directory dir;
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('ff_pub_root');
+      dir = Directory('${root.path}${Platform.pathSeparator}Download'
+          '${Platform.pathSeparator}${FileStore.publicDirName}'
+          '${Platform.pathSeparator}${MediaKind.audio.dirName}')
+        ..createSync(recursive: true);
+    });
+
+    tearDown(() {
+      Process.runSync('chmod', ['700', dir.path]);
+      if (root.existsSync()) root.deleteSync(recursive: true);
+    });
+
+    test('目录不存在时先建出来再返回', () async {
+      dir.deleteSync();
+      final r = await FileStore.publicDirIn(root, MediaKind.audio);
+      expect(r?.path, dir.path);
+      expect(dir.existsSync(), isTrue);
+    });
+
+    test('目录已存在且可写时返回该目录', () async {
+      final r = await FileStore.publicDirIn(root, MediaKind.audio);
+      expect(r?.path, dir.path);
+    });
+
+    test('目录已存在但不可写时返回 null（交给 MediaStore 兜底）', () async {
+      if (!_makeReadOnly(dir)) return; // 当前环境构造不出该场景（Windows / root）
+      expect(dir.existsSync(), isTrue, reason: '前提：目录确实已存在');
+      expect(await FileStore.publicDirIn(root, MediaKind.audio), isNull);
+    });
+  });
+
   group('OutputPlan', () {
     test('needsExport 只在需要搬运时为真', () {
       const none = OutputPlan(path: '/a/b.mp4');
@@ -111,4 +147,16 @@ void main() {
       expect(mediaStore.needsExport, isTrue);
     });
   });
+}
+
+/// 把 [dir] 改成不可写（模拟 Android 上"目录存在但没权限写"）。
+/// 返回 false = 当前环境构造不出该场景（Windows 无 chmod、root 无视权限位）。
+bool _makeReadOnly(Directory dir) {
+  try {
+    if (Process.runSync('chmod', ['500', dir.path]).exitCode != 0) return false;
+    final uid = Process.runSync('id', ['-u']).stdout.toString().trim();
+    return uid != '0';
+  } catch (_) {
+    return false;
+  }
 }

@@ -197,17 +197,21 @@ class FileStore {
   static Future<Directory?> publicDir(MediaKind kind) async {
     final root = await primaryExternalRoot();
     if (root == null) return null;
+    return publicDirIn(root, kind);
+  }
+
+  /// [publicDir] 的实际判定（[root] 为主存储根，测试可直接注入）。
+  ///
+  /// 必须**实测可写**：目录可能早就被 MediaStore 导入时建好了，于是"存在"却
+  /// 写不进去（Android 10 拿不到 WRITE_EXTERNAL_STORAGE、Android 11+ 没有
+  /// "所有文件访问"）。只看 exists/create 会漏判，让原生解密器/FFmpeg 直写时
+  /// 才以 `open failed: EACCES` 暴露（NCM 脱壳失败的根因）。
+  static Future<Directory?> publicDirIn(Directory root, MediaKind kind) async {
     final dir = Directory(
         '${root.path}${Platform.pathSeparator}Download'
         '${Platform.pathSeparator}$publicDirName'
         '${Platform.pathSeparator}${kind.dirName}');
-    try {
-      if (!await dir.exists()) await dir.create(recursive: true);
-      return dir;
-    } catch (_) {
-      // Android 10+ 没有"所有文件访问"权限时创建会失败 → 交给 MediaStore
-      return null;
-    }
+    return await ensureWritable(dir) ? dir : null;
   }
 
   /// 默认输出目录的可读描述（设置页展示用，不触发权限申请）。
