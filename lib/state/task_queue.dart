@@ -83,6 +83,7 @@ ConvertTask _segmentTask(
     outputPath: _partPath(base.outputPath, part),
     createdAt: base.createdAt,
     unlockFormat: base.unlockFormat,
+    unlockDestDir: base.unlockDestDir,
     mergeAudioPath: base.mergeAudioPath,
     safTreeUri: base.safTreeUri,
     mediaStoreDir: base.mediaStoreDir,
@@ -99,6 +100,18 @@ String _partPath(String path, int part) {
   if (dot < 0 || dot < slash) return '${path}_part$part';
   return '${path.substring(0, dot)}_part$part${path.substring(dot)}';
 }
+
+/// 重试前的状态还原（纯函数，便于测试）：清空错误、进度归零、回到排队中。
+///
+/// 脱壳任务额外把 [ConvertTask.outputPath] 从"真实产物文件"还原成
+/// [ConvertTask.unlockDestDir]（输出目录）——解密成功时 [outputPath] 已被改写成
+/// 产物文件，若不还原，重试会把文件路径当目录传给原生解密器而再次失败。
+ConvertTask resetForRetry(ConvertTask task) => task.copyWith(
+      status: TaskStatus.queued,
+      progress: 0,
+      clearError: true,
+      outputPath: task.unlockDestDir ?? task.outputPath,
+    );
 
 /// 单条 FFmpeg 命令的执行结果。
 enum _ExecResult { success, failed, canceled }
@@ -330,7 +343,7 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       final r = await UnlockApi.unlockMusic(
         format: task.unlockFormat!,
         src: task.inputPath,
-        destDir: task.outputPath,
+        destDir: task.unlockDestDir ?? task.outputPath,
       );
 
       // 把输出路径更新为解密后的真实文件，再与转换流程一致地收尾（含通知/历史/SAF复制）
@@ -530,8 +543,7 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
 
   /// 失败/取消的任务重试（重新排队，清空错误）。
   void retry(String id) {
-    _patch(id,
-        (t) => t.copyWith(status: TaskStatus.queued, progress: 0, clearError: true));
+    _patch(id, resetForRetry);
     _pump();
   }
 

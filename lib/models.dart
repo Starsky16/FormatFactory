@@ -94,6 +94,7 @@ class ConvertTask {
     required this.outputPath,
     required this.createdAt,
     this.unlockFormat,
+    this.unlockDestDir,
     this.mergeAudioPath,
     this.safTreeUri,
     this.mediaStoreDir,
@@ -110,6 +111,13 @@ class ConvertTask {
 
   /// 若非空 = "脱壳"任务（如 'ncm'），不走 FFmpeg 而是调用原生解密通道。
   final String? unlockFormat;
+
+  /// 脱壳任务的**输出目录**（原生解密器写入位置）。
+  ///
+  /// ⚠️ 脱壳任务的 [outputPath] 语义会变：入队时先等于本目录，解密成功后
+  /// 被改写成"真实产物文件"（供分享/历史使用）。重试时必须靠本字段把
+  /// [outputPath] 还原成目录，否则原生端会把产物文件路径当目录用。
+  final String? unlockDestDir;
 
   /// 若非空 = 该任务要把两路流合成一个文件（B站缓存的 video.m4s + audio.m4s）：
   /// 值为第二路（音频流）路径，主输入见 [inputPath]。
@@ -173,6 +181,7 @@ class ConvertTask {
       outputPath: outputPath ?? this.outputPath,
       createdAt: createdAt,
       unlockFormat: unlockFormat,
+      unlockDestDir: unlockDestDir,
       mergeAudioPath: mergeAudioPath ?? this.mergeAudioPath,
       safTreeUri: safTreeUri,
       mediaStoreDir: mediaStoreDir,

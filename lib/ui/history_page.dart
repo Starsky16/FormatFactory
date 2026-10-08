@@ -197,6 +197,7 @@ class _HistoryTile extends ConsumerWidget {
           outputPath: out.dir.path,
           createdAt: DateTime.now(),
           unlockFormat: entry.presetId.substring('unlock_'.length),
+          unlockDestDir: out.dir.path,
           safTreeUri: out.safTreeUri,
           mediaStoreDir: out.mediaStoreDir,
         );

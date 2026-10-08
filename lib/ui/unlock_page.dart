@@ -134,6 +134,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         outputPath: destDir.path,
         createdAt: now,
         unlockFormat: ext,
+        unlockDestDir: destDir.path,
         safTreeUri: out.safTreeUri,
         mediaStoreDir: out.mediaStoreDir,
       ));

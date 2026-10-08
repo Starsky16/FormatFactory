@@ -24,6 +24,16 @@ void main() {
     });
   });
 
+  group('默认目录直写判定（Android 10 是权限死角）', () {
+    test('只有 API 29 跳过直写，其余版本照常尝试', () {
+      expect(FileStore.isPublicWriteBlocked(29), isTrue,
+          reason: 'WRITE_EXTERNAL_STORAGE 到 28 为止、MANAGE 到 30 起，29 两头落空');
+      for (final sdk in [24, 28, 30, 33, 34, 35]) {
+        expect(FileStore.isPublicWriteBlocked(sdk), isFalse);
+      }
+    });
+  });
+
   group('输出文件名（原名优先，重名加序号）', () {
     late Directory dir;
     setUp(() {
@@ -68,6 +78,12 @@ void main() {
   });
 
   group('ensureWritable（自选目录可写性探针）', () {
+    test('探针必须与真实产物等价：带媒体扩展名、非隐藏', () {
+      expect(FileStore.probeFileName, endsWith('.mp3'));
+      expect(FileStore.probeFileName.startsWith('.'), isFalse,
+          reason: '隐藏点文件在 Android 10 的 FUSE 上会被误判成可写');
+    });
+
     test('可写目录返回 true 且不留探针文件', () async {
       final dir = Directory.systemTemp.createTempSync('ff_writable');
       addTearDown(() => dir.deleteSync(recursive: true));
