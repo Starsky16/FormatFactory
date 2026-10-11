@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models.dart';
@@ -10,6 +11,7 @@ import '../services/file_store.dart';
 import '../services/manage_permission.dart';
 import '../services/storage_access.dart';
 import '../state/app_settings.dart';
+import '../state/task_queue.dart';
 import 'file_browser_page.dart';
 
 /// 设置页：输出位置 + 读取文件方式。
@@ -24,12 +26,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// "文件管理权限"模式当前的授权状态。
   PermissionStatus? _manageStatus;
 
+  /// 应用版本号文本（如 `FormatFactory v0.6.2+20`），读取前为 null。
+  String? _versionText;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _refreshPermission();
     });
+    _loadVersion();
+  }
+
+  /// 从构建产物读版本号（pubspec 的 `version` 会写进原生包信息），
+  /// 不手写字符串、不读源码文件。
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() =>
+          _versionText = 'FormatFactory v${info.version}+${info.buildNumber}');
+    } catch (_) {
+      if (mounted) setState(() => _versionText = 'FormatFactory');
+    }
   }
 
   static Future<PermissionStatus> _permStatus() async {
@@ -126,6 +145,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SizedBox(height: 12),
         _sectionTitle('自定义目录的选择方式'),
         _dirPickerCard(theme),
+        const SizedBox(height: 12),
+        _sectionTitle('缓存与工作区'),
+        _workspaceCard(),
         const SizedBox(height: 12),
         _sectionTitle('通知'),
         Card(
@@ -228,6 +250,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _sectionTitle('关于'),
         Card(
           child: ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('版本'),
+            subtitle: Text(_versionText ?? '正在读取…'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
             leading: const Icon(Icons.gavel_outlined),
             title: const Text('开源许可与致谢'),
             subtitle: const Text('本项目使用到的开源库与算法参考'),
@@ -237,6 +267,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ],
     );
+  }
+
+  /// 工作区卡片：清理内部工作副本（脱壳重复产物 / 转码中间文件 / B站导入镜像）。
+  /// 队列中有未结束任务时禁用，避免删掉正在读写的文件。
+  Widget _workspaceCard() {
+    final busy = ref.watch(taskQueueProvider).any((t) => !t.status.isFinished);
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.cleaning_services_outlined),
+        title: const Text('清理工作区'),
+        subtitle: Text(busy
+            ? '有任务正在排队或执行，结束后才能清理'
+            : '删除脱壳 / 转码 / B站导入留下的工作副本（不影响已导出的成品）'),
+        enabled: !busy,
+        onTap: busy ? null : _confirmClearWorkspace,
+      ),
+    );
+  }
+
+  /// 确认后清理工作区，并用 SnackBar 反馈释放的空间。
+  Future<void> _confirmClearWorkspace() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清理工作区'),
+        content: const Text('将删除应用内部工作区的全部副本：脱壳重复产物、'
+            '转码中间文件、B站缓存导入镜像等。\n\n'
+            '已导出到"下载/FormatExport"或你自选目录的成品不受影响。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('清理'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final r = await FileStore.clearWorkspace();
+    final freed = formatBytes(r.released);
+    final String msg;
+    if (r.failed.isNotEmpty) {
+      msg = '已清理部分工作区${r.released > 0 ? '，释放 $freed' : ''}；'
+          '${r.failed.length} 项残留未能删除';
+    } else if (r.released > 0) {
+      msg = '已清理工作区，释放 $freed';
+    } else {
+      msg = '工作区已经是空的';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
   }
 
   /// 弹窗展示：本项目许可证 + 使用的开源库 + 脱壳算法参考。

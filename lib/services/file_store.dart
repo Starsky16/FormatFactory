@@ -95,6 +95,61 @@ class FileStore {
     return dir;
   }
 
+  /// 内部工作区根目录（`FormatFactory_work`），不自动创建。
+  static Future<Directory> workspaceRoot() async {
+    final base = await getApplicationSupportDirectory();
+    return Directory('${base.path}${Platform.pathSeparator}FormatFactory_work');
+  }
+
+  /// 清理内部工作区：统计 `FormatFactory_work` 占用字节数，整目录删除后重建空骨架。
+  ///
+  /// 返回释放的字节数与删不掉的路径列表（[failed] 非空表示部分子项残留）。
+  /// 只动本函数管理的目录，**不碰**用户所选 SAF 目录、Download 侧成品，也不动
+  /// 应用专属输出目录（`FormatFactory/<类别>`，那是用户可选的成品落点）。
+  static Future<({int released, List<String> failed})> clearWorkspace() async {
+    final root = await workspaceRoot();
+    // 目录被删后，缓存里的"可写"判定失真，按前缀失效
+    _verifiedWritable.removeWhere((p) =>
+        p == root.path ||
+        p.startsWith('${root.path}${Platform.pathSeparator}'));
+    if (!await root.exists()) return (released: 0, failed: <String>[]);
+    final released = await _dirBytes(root);
+    final failed = <String>[];
+    try {
+      await root.delete(recursive: true);
+    } catch (_) {
+      // 整目录删失败：逐子项兜底，别让个别残留挡住其余清理
+      try {
+        for (final e in root.listSync()) {
+          try {
+            await e.delete(recursive: true);
+          } catch (_) {
+            failed.add(e.path);
+          }
+        }
+      } catch (_) {}
+    }
+    try {
+      await root.create(recursive: true);
+    } catch (_) {}
+    return (released: released, failed: failed);
+  }
+
+  /// 递归统计目录内所有文件字节数（失败项按 0 计）。
+  static Future<int> _dirBytes(Directory dir) async {
+    var total = 0;
+    try {
+      await for (final e in dir.list(recursive: true, followLinks: false)) {
+        if (e is File) {
+          try {
+            total += await e.length();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return total;
+  }
+
   /// 解析某个设置项对应的输出目标（实际写入目录 + 搬运方式）。
   static Future<OutputTarget> resolve(MediaKind kind, String target) async {
     if (target == AppSettings.targetApp) {
