@@ -94,7 +94,7 @@ jobs:
             "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}-annotated" || true
           notes="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}-annotated")"
           {
-            echo "自动构建于 GitHub Actions，可用下方 APK 安装：arm64-v8a（主流手机）/ armeabi-v7a（32位老机）/ x86_64（模拟器）。"
+            echo "自动构建于 GitHub Actions。按机型选一个安装：arm64-v8a（主流手机）/ armeabi-v7a（32 位老机型）/ x86_64（模拟器）；三者因 ABI 偏移 versionCode 不同，不能互相覆盖安装。"
             if [ -n "$notes" ]; then
               printf '\n## 本次更新\n\n%s\n' "$notes"
             else
