@@ -121,7 +121,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
     final tasks = <ConvertTask>[];
     for (final e in _items) {
-      final ext = e.path.split('.').last.toLowerCase();
+      final ext = unlockExtensionOf(e.path);
       tasks.add(ConvertTask(
         id: TaskQueue.newId(),
         kind: MediaKind.audio,

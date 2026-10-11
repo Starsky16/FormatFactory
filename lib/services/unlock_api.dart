@@ -21,6 +21,24 @@ final List<String> kAllUnlockExtensions = [
   ...kKwmExtensions,
 ];
 
+/// 从路径中提取脱壳后缀。
+///
+/// 规则：按 '.' 分割文件名，从右往左扫描各段（跳过最后一段——那是真实
+/// 容器后缀），命中 [kAllUnlockExtensions] 之一即返回（小写）；
+/// 均未命中则退化为传统取最后一个后缀（兼容普通文件）。
+String unlockExtensionOf(String path) {
+  final name = path.contains('/')
+      ? path.substring(path.lastIndexOf('/') + 1)
+      : path;
+  final parts = name.split('.');
+  if (parts.length < 2) return '';
+  for (var i = parts.length - 2; i >= 0; i--) {
+    final seg = parts[i].toLowerCase();
+    if (kAllUnlockExtensions.contains(seg)) return seg;
+  }
+  return parts.last.toLowerCase();
+}
+
 /// 调 Android 原生"脱壳"通道（MainActivity 里的 com.starksky16.formatfactory/unlock）。
 class UnlockApi {
   UnlockApi._();
