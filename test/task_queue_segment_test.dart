@@ -112,6 +112,89 @@ void main() {
     });
   });
 
+  group('resetForRetry（失败重试的状态还原）', () {
+    test('脱壳任务：outputPath 从真实产物还原成输出目录', () {
+      // 模拟"解密成功、搬运失败"后的任务：outputPath 已被改写成 .mp3 产物
+      final t = ConvertTask(
+        id: 'u1',
+        kind: MediaKind.audio,
+        inputPath: '/in/a.ncm',
+        inputName: 'a.ncm',
+        presetId: 'unlock_ncm',
+        presetName: 'NCM',
+        settings: ConvertSettings.empty,
+        outputPath: '/out/audio/a.mp3',
+        createdAt: DateTime(2026, 1, 1),
+        unlockFormat: 'ncm',
+        unlockDestDir: '/out/audio',
+        status: TaskStatus.failed,
+        progress: 1.0,
+        error: '脱壳失败：xxx',
+      );
+
+      final r = resetForRetry(t);
+      expect(r.outputPath, '/out/audio',
+          reason: '必须还原成目录，否则原生端把文件路径当目录拼子路径');
+      expect(r.unlockDestDir, '/out/audio');
+      expect(r.unlockFormat, 'ncm');
+      expect(r.status, TaskStatus.queued);
+      expect(r.progress, 0);
+      expect(r.error, isNull);
+    });
+
+    test('非脱壳任务：outputPath 原样保留，只清状态', () {
+      final t = base().copyWith(
+        status: TaskStatus.failed,
+        progress: 0.4,
+        error: 'boom',
+      );
+      final r = resetForRetry(t);
+      expect(r.outputPath, '/out/a.mp4');
+      expect(r.status, TaskStatus.queued);
+      expect(r.progress, 0);
+      expect(r.error, isNull);
+    });
+  });
+
+  group('mergeUnlockResult（解密成功后的状态合并）', () {
+    ConvertTask unlockTask({required TaskStatus status}) => ConvertTask(
+          id: 'u1',
+          kind: MediaKind.audio,
+          inputPath: '/in/a.ncm',
+          inputName: 'a.ncm',
+          presetId: 'unlock_ncm',
+          presetName: 'NCM',
+          settings: ConvertSettings.empty,
+          outputPath: '/out/audio',
+          createdAt: DateTime(2026, 1, 1),
+          unlockFormat: 'ncm',
+          unlockDestDir: '/out/audio',
+          status: status,
+          progress: 0.5,
+        );
+
+    test('以运行中的实时对象为基底：保留 running，不被打回排队中', () {
+      // 回归：旧实现拿 _run 入口快照整体覆盖 state，快照 status 是 queued，
+      // 任务在"搬运到目标"的 await 窗口里看似重新排队，被 _pump 二次拉起
+      // 反复重跑（完成/进行中横跳 + CPU 反复解密发烫）
+      final r = mergeUnlockResult(unlockTask(status: TaskStatus.running), '/out/audio/a.mp3');
+      expect(r.status, TaskStatus.running,
+          reason: '搬运完成前任务仍在进行，绝不能回到 queued 让 _pump 重新拉起');
+      expect(r.outputPath, '/out/audio/a.mp3');
+      expect(r.progress, 1.0);
+    });
+
+    test('产物路径与进度写入，其余字段不动', () {
+      final t = unlockTask(status: TaskStatus.running);
+      final r = mergeUnlockResult(t, '/out/audio/b.flac');
+      expect(r.id, t.id);
+      expect(r.inputPath, t.inputPath);
+      expect(r.unlockFormat, t.unlockFormat);
+      expect(r.unlockDestDir, t.unlockDestDir);
+      expect(r.outputPath, '/out/audio/b.flac');
+    });
+  });
+
   group('summary 不受新参数破坏', () {
     test('含裁剪/分段设置的 summary 正常拼接', () {
       final s = ConvertSettings({

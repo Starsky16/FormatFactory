@@ -135,9 +135,18 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   bool _match(String name) {
-    final dot = name.lastIndexOf('.');
-    if (dot < 0) return false;
-    return widget.extensions.contains(name.substring(dot + 1).toLowerCase());
+    final base =
+        name.contains('/') ? name.substring(name.lastIndexOf('/') + 1) : name;
+    final parts = base.split('.');
+    if (parts.length < 2) return false;
+    // 末段（真实容器后缀）命中即通过
+    if (widget.extensions.contains(parts.last.toLowerCase())) return true;
+    // 双后缀：末段不中再查倒数第二段（如 xxx.kgm.flac 的 kgm）
+    if (parts.length >= 3 &&
+        widget.extensions.contains(parts[parts.length - 2].toLowerCase())) {
+      return true;
+    }
+    return false;
   }
 
   /// 全选当前可见的可转换文件（目录模式=当前目录文件；搜索模式=搜索结果文件）。

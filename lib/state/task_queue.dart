@@ -83,6 +83,7 @@ ConvertTask _segmentTask(
     outputPath: _partPath(base.outputPath, part),
     createdAt: base.createdAt,
     unlockFormat: base.unlockFormat,
+    unlockDestDir: base.unlockDestDir,
     mergeAudioPath: base.mergeAudioPath,
     safTreeUri: base.safTreeUri,
     mediaStoreDir: base.mediaStoreDir,
@@ -99,6 +100,28 @@ String _partPath(String path, int part) {
   if (dot < 0 || dot < slash) return '${path}_part$part';
   return '${path.substring(0, dot)}_part$part${path.substring(dot)}';
 }
+
+/// 重试前的状态还原（纯函数，便于测试）：清空错误、进度归零、回到排队中。
+///
+/// 脱壳任务额外把 [ConvertTask.outputPath] 从"真实产物文件"还原成
+/// [ConvertTask.unlockDestDir]（输出目录）——解密成功时 [outputPath] 已被改写成
+/// 产物文件，若不还原，重试会把文件路径当目录传给原生解密器而再次失败。
+ConvertTask resetForRetry(ConvertTask task) => task.copyWith(
+      status: TaskStatus.queued,
+      progress: 0,
+      clearError: true,
+      outputPath: task.unlockDestDir ?? task.outputPath,
+    );
+
+/// 解密成功后把产物路径合并进任务（纯函数，便于测试）。
+///
+/// ⚠️ 调用方必须以 [current]（state 里的**实时**任务对象）为基底合并，并
+/// **保留其 status**；绝不能用 `_run` 入口的旧快照整体覆盖——快照的 status
+/// 还是"排队中"，打回去会让任务在"搬运到目标"的 await 窗口里看起来重新
+/// 排队，被 [_pump] 二次拉起反复重跑（表现为任务在"完成/进行中"横跳、
+/// CPU 反复解密发烫）。
+ConvertTask mergeUnlockResult(ConvertTask current, String productPath) =>
+    current.copyWith(outputPath: productPath, progress: 1.0);
 
 /// 单条 FFmpeg 命令的执行结果。
 enum _ExecResult { success, failed, canceled }
@@ -330,17 +353,25 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
       final r = await UnlockApi.unlockMusic(
         format: task.unlockFormat!,
         src: task.inputPath,
-        destDir: task.outputPath,
+        destDir: task.unlockDestDir ?? task.outputPath,
       );
 
-      // 把输出路径更新为解密后的真实文件，再与转换流程一致地收尾（含通知/历史/SAF复制）
-      final done = task.copyWith(outputPath: r.path, progress: 1.0);
-      _patch(done.id, (_) => done);
+      // 把输出路径更新为解密后的真实文件。必须打"字段补丁"（以 state 里的
+      // 实时对象为基底、保留其 running 状态），不能拿 _run 入口的旧快照整体
+      // 覆盖——见 mergeUnlockResult 的文档注释。
+      _patch(task.id, (t) => mergeUnlockResult(t, r.path));
       // 若在脱壳过程中用户请求取消（原生不支持中途停），按"已取消"收尾。
-      // 注意要传 done（outputPath 已换成真实产物），否则 _finish 里的
-      // "删除半成品"会拿到输出目录、删不掉文件。
+      // 注意要基于补丁后的最新对象收尾（outputPath 已换成真实产物），否则
+      // _finish 里的"删除半成品"会拿到输出目录、删不掉文件。
       if (_cancelRequested.remove(task.id)) {
-        _finish(done, canceled: true);
+        final canceled = state.where((t) => t.id == task.id).firstOrNull;
+        if (canceled != null) _finish(canceled, canceled: true);
+        return;
+      }
+      final done = state.where((t) => t.id == task.id).firstOrNull;
+      if (done == null) {
+        // 任务在解密期间被移除（运行中任务正常到不了这里），释放槽位即可
+        _active = _active > 0 ? _active - 1 : 0;
         return;
       }
       if (_notifyEnabled) {
@@ -530,8 +561,7 @@ class TaskQueue extends Notifier<List<ConvertTask>> {
 
   /// 失败/取消的任务重试（重新排队，清空错误）。
   void retry(String id) {
-    _patch(id,
-        (t) => t.copyWith(status: TaskStatus.queued, progress: 0, clearError: true));
+    _patch(id, resetForRetry);
     _pump();
   }
 

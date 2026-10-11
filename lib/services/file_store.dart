@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models.dart';
 import '../state/app_settings.dart';
 import 'manage_permission.dart';
+import 'storage_access.dart';
 
 /// 一次输出的落点解析结果：FFmpeg / 解锁器实际写入 [dir]；
 /// [safTreeUri] / [mediaStoreDir] 非空表示转换完成后需要把产物搬运出去。
@@ -60,7 +61,11 @@ class FileStore {
   static const String publicDirName = 'FormatExport';
 
   /// 可写性探针文件名（写在用户的输出目录里，随即删除）。
-  static const String probeFileName = '.formatfactory_write_test';
+  ///
+  /// ⚠️ 必须**带真实媒体扩展名且非隐藏**：Android 10 的 FUSE 对"媒体文件"与
+  /// "非媒体文件（点文件 / 无媒体扩展名）"的可写判定不同，隐藏点文件会被误判
+  /// 成可写，导致原生端真正写 `.mp3` 时才以 `open failed: EACCES` 失败。
+  static const String probeFileName = 'formatfactory_write_test.mp3';
 
   /// MediaStore 导入用的相对路径：`Download/FormatExport/<类别>`。
   static String mediaStoreDirFor(MediaKind kind) =>
@@ -88,6 +93,61 @@ class FileStore {
       await dir.create(recursive: true);
     }
     return dir;
+  }
+
+  /// 内部工作区根目录（`FormatFactory_work`），不自动创建。
+  static Future<Directory> workspaceRoot() async {
+    final base = await getApplicationSupportDirectory();
+    return Directory('${base.path}${Platform.pathSeparator}FormatFactory_work');
+  }
+
+  /// 清理内部工作区：统计 `FormatFactory_work` 占用字节数，整目录删除后重建空骨架。
+  ///
+  /// 返回释放的字节数与删不掉的路径列表（[failed] 非空表示部分子项残留）。
+  /// 只动本函数管理的目录，**不碰**用户所选 SAF 目录、Download 侧成品，也不动
+  /// 应用专属输出目录（`FormatFactory/<类别>`，那是用户可选的成品落点）。
+  static Future<({int released, List<String> failed})> clearWorkspace() async {
+    final root = await workspaceRoot();
+    // 目录被删后，缓存里的"可写"判定失真，按前缀失效
+    _verifiedWritable.removeWhere((p) =>
+        p == root.path ||
+        p.startsWith('${root.path}${Platform.pathSeparator}'));
+    if (!await root.exists()) return (released: 0, failed: <String>[]);
+    final released = await _dirBytes(root);
+    final failed = <String>[];
+    try {
+      await root.delete(recursive: true);
+    } catch (_) {
+      // 整目录删失败：逐子项兜底，别让个别残留挡住其余清理
+      try {
+        for (final e in root.listSync()) {
+          try {
+            await e.delete(recursive: true);
+          } catch (_) {
+            failed.add(e.path);
+          }
+        }
+      } catch (_) {}
+    }
+    try {
+      await root.create(recursive: true);
+    } catch (_) {}
+    return (released: released, failed: failed);
+  }
+
+  /// 递归统计目录内所有文件字节数（失败项按 0 计）。
+  static Future<int> _dirBytes(Directory dir) async {
+    var total = 0;
+    try {
+      await for (final e in dir.list(recursive: true, followLinks: false)) {
+        if (e is File) {
+          try {
+            total += await e.length();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return total;
   }
 
   /// 解析某个设置项对应的输出目标（实际写入目录 + 搬运方式）。
@@ -118,19 +178,25 @@ class FileStore {
   /// 确保 [dir] 存在并且**真的能写**；能写返回 true。
   ///
   /// 只调 `create` 不够：目录已存在但不可写时（只读存储卡、系统受限目录、
-  /// 拿了权限又被回收等）`create` 不会报错，问题会拖到 FFmpeg 阶段才以权限错误
-  /// 暴露出来。所以这里写一个探针文件验证，写完立刻删掉。
+  /// 拿了权限又被回收等）`create` 不会报错，问题会拖到 FFmpeg / 原生解密器
+  /// 阶段才以权限错误暴露出来。所以这里写一个探针文件验证，写完立刻删掉。
+  ///
+  /// 探针必须**与真实产物等价**：写非空内容、文件名带真实媒体扩展名
+  ///（见 [probeFileName]），否则会被 FUSE 的"媒体/非媒体"分支差异误导。
   static Future<bool> ensureWritable(Directory dir) async {
     if (_verifiedWritable.contains(dir.path)) return true;
+    final probe = File('${dir.path}${Platform.pathSeparator}$probeFileName');
     try {
       if (!await dir.exists()) await dir.create(recursive: true);
-      final probe =
-          File('${dir.path}${Platform.pathSeparator}$probeFileName');
-      await probe.writeAsString('', flush: true);
-      await probe.delete();
+      await probe.writeAsString('formatfactory-write-probe', flush: true);
+      if (await probe.exists()) await probe.delete();
       _verifiedWritable.add(dir.path);
       return true;
     } catch (_) {
+      // 尽力清掉探针，别在用户目录里留垃圾
+      try {
+        if (await probe.exists()) await probe.delete();
+      } catch (_) {}
       return false;
     }
   }
@@ -181,9 +247,23 @@ class FileStore {
     }
   }
 
+  /// Android 10（API 29）是权限死角，默认目录必须**跳过直写**、直接走
+  /// "内部工作区 + MediaStore 导入"：
+  ///  - `WRITE_EXTERNAL_STORAGE` 因 `maxSdkVersion="28"` 在 29 上根本拿不到；
+  ///  - `MANAGE_EXTERNAL_STORAGE`（"所有文件访问"）要 30+ 才生效。
+  /// 于是公共 Download 实际不可写，而 FUSE 的判定还不稳定（[ensureWritable]
+  /// 探针可能误报可写），别去赌那一次直写。
+  static bool isPublicWriteBlocked(int sdkInt) => sdkInt == 29;
+
   /// 默认目录：能直写就直写，否则走"内部工作区 + MediaStore 导入"。
   static Future<OutputTarget> _resolveDefault(MediaKind kind) async {
-    // Android 10 及以下直写公共 Download 需要经典存储权限（11+ 走 MediaStore，不需要）
+    if (isPublicWriteBlocked(StorageAccess.sdkInt)) {
+      return OutputTarget(
+        dir: await workDir(kind),
+        mediaStoreDir: mediaStoreDirFor(kind),
+      );
+    }
+    // Android 10 及以下（≤28）直写公共 Download 需要经典存储权限（11+ 走 MediaStore，不需要）
     await ManagePermission.ensureLegacyStorageForPublicOutput();
     final direct = await publicDir(kind);
     if (direct != null) return OutputTarget(dir: direct);
@@ -197,17 +277,21 @@ class FileStore {
   static Future<Directory?> publicDir(MediaKind kind) async {
     final root = await primaryExternalRoot();
     if (root == null) return null;
+    return publicDirIn(root, kind);
+  }
+
+  /// [publicDir] 的实际判定（[root] 为主存储根，测试可直接注入）。
+  ///
+  /// 必须**实测可写**：目录可能早就被 MediaStore 导入时建好了，于是"存在"却
+  /// 写不进去（Android 10 拿不到 WRITE_EXTERNAL_STORAGE、Android 11+ 没有
+  /// "所有文件访问"）。只看 exists/create 会漏判，让原生解密器/FFmpeg 直写时
+  /// 才以 `open failed: EACCES` 暴露（NCM 脱壳失败的根因）。
+  static Future<Directory?> publicDirIn(Directory root, MediaKind kind) async {
     final dir = Directory(
         '${root.path}${Platform.pathSeparator}Download'
         '${Platform.pathSeparator}$publicDirName'
         '${Platform.pathSeparator}${kind.dirName}');
-    try {
-      if (!await dir.exists()) await dir.create(recursive: true);
-      return dir;
-    } catch (_) {
-      // Android 10+ 没有"所有文件访问"权限时创建会失败 → 交给 MediaStore
-      return null;
-    }
+    return await ensureWritable(dir) ? dir : null;
   }
 
   /// 默认输出目录的可读描述（设置页展示用，不触发权限申请）。
