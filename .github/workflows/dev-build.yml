@@ -40,9 +40,11 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      # dev 包一律使用 debug 签名，不还原正式签名材料：
-      # 开发预览包与正式包签名不同，安装时需先卸载正式包。
+      # dev 包一律使用 debug 签名，不还原正式签名材料。
+      # DEV_BUILD=true 让包名追加 .dev 后缀，dev 包成为独立应用，可与正式版并存。
       - name: Build release-mode APKs (debug signing)
+        env:
+          DEV_BUILD: 'true'
         run: flutter build apk --release --split-per-abi
 
       - name: Publish prerelease dev-build
@@ -58,7 +60,7 @@ jobs:
             echo "- 提交：${GITHUB_SHA::7} $(git log -1 --format=%s)"
             echo "- 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')"
             echo "- 稳定版请用 [正式 Release](https://github.com/${GITHUB_REPOSITORY}/releases/latest)"
-            echo "- ⚠️ debug 签名（dev 预览包）：与正式包签名不同，安装前需先卸载正式包"
+            echo "- ⚠️ debug 签名 + 包名 .dev 后缀：dev 包是独立应用，可与正式版并存安装（数据互不相通）"
           } > "$RUNNER_TEMP/notes.md"
           gh release create dev-build \
             --target "$GITHUB_SHA" \

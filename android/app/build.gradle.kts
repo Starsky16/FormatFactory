@@ -16,6 +16,10 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// dev 预发布包（CI 设 DEV_BUILD=true）使用 .dev 包名后缀与 -dev 版本后缀，
+// 作为独立应用与正式版并存安装；正式发版不设该环境变量，包名保持不变。
+val devBuild = System.getenv("DEV_BUILD") == "true"
+
 android {
     // 包名（应用唯一标识；如需上架应用商店，建议改为你自己域名的反写，如 com.yourname.xxx）
     namespace = "com.starksky16.formatfactory"
@@ -58,6 +62,10 @@ android {
 
     buildTypes {
         release {
+            if (devBuild) {
+                applicationIdSuffix = ".dev"
+                versionNameSuffix = "-dev"
+            }
             // 有 key.properties 就用正式签名；没有（CI / 别人 clone）退回 debug 签名
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
