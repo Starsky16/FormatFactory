@@ -43,6 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Gradle 在 android/ 下生成的报告（lint / problems report 等）
+/android/build/
 
 # Widget Preview related
 .widget_preview/
