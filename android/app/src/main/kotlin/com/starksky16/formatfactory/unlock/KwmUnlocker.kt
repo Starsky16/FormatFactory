@@ -10,7 +10,7 @@ import java.io.RandomAccessFile
  * 上游仓库已被 DMCA 下架（GitHub unlock-music/cli，2022-11），本文档仅保留算法规格，
  * 来源与旁证镜像核对记录见 android/tools/ref/README.md。
  *
- * 支持范围（用户知情拍板，见 workflow-sync plans/2026-10-04-format-factory-t12-kwm.md）：
+ * 支持范围（维护者已就 KWM v1/v2 的支持边界拍板）：
  * - KWM v1：固定 0x400 头 + 32 字节循环 XOR，纯离线可解 → 支持
  * - KWM v2：加密谱系为 QMCv2/RC4+ekey（DMCA 点名算法），离线无密钥、需 root → **不做**，检测到即报错
  */
